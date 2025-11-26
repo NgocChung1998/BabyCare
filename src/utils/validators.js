@@ -1,7 +1,13 @@
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat.js';
+import utc from 'dayjs/plugin/utc.js';
+import timezone from 'dayjs/plugin/timezone.js';
 
 dayjs.extend(customParseFormat);
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+const VIETNAM_TZ = 'Asia/Ho_Chi_Minh';
 
 /**
  * Parse số dương từ input
@@ -18,6 +24,7 @@ export const parseFloatStrict = (input) => {
 
 /**
  * Parse ngày theo nhiều định dạng (YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY)
+ * Tự động convert sang timezone Việt Nam
  * @param {string} dateText - Chuỗi ngày
  * @returns {dayjs.Dayjs|null}
  */
@@ -26,15 +33,21 @@ export const parseDate = (dateText) => {
   
   // Thử YYYY-MM-DD trước
   let date = dayjs(dateText, 'YYYY-MM-DD', true);
-  if (date.isValid()) return date;
+  if (date.isValid()) {
+    return dayjs.tz(date, VIETNAM_TZ);
+  }
   
   // Thử DD/MM/YYYY
   date = dayjs(dateText, 'DD/MM/YYYY', true);
-  if (date.isValid()) return date;
+  if (date.isValid()) {
+    return dayjs.tz(date, VIETNAM_TZ);
+  }
   
   // Thử DD-MM-YYYY
   date = dayjs(dateText, 'DD-MM-YYYY', true);
-  if (date.isValid()) return date;
+  if (date.isValid()) {
+    return dayjs.tz(date, VIETNAM_TZ);
+  }
   
   return null;
 };
@@ -64,4 +77,3 @@ export const normalizeScheduleType = (text) => {
   if (normalized.includes('tã')) return 'diaper';
   return 'other';
 };
-

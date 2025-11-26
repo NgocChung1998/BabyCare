@@ -1,21 +1,28 @@
 import cron from 'node-cron';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc.js';
+import timezone from 'dayjs/plugin/timezone.js';
 import { CONSTANTS } from '../config/index.js';
 import { safeSendMessage } from '../bot/index.js';
 import { ChatProfile, VaccineSchedule, DailySchedule } from '../database/models/index.js';
 import { calculateSleepStats } from '../bot/handlers/sleep.js';
 import { formatScheduleItems, formatMinutes } from '../utils/formatters.js';
 
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+const VIETNAM_TZ = 'Asia/Ho_Chi_Minh';
+
 const jobs = [];
 
 /**
- * Job nhắc vaccine (9h sáng hàng ngày)
+ * Job nhắc vaccine (9h sáng hàng ngày theo giờ Việt Nam)
  */
 const createVaccineReminderJob = () => {
   return cron.schedule(
     '0 0 9 * * *',
     async () => {
-      const today = dayjs().startOf('day');
+      const today = dayjs.tz(dayjs(), VIETNAM_TZ).startOf('day');
       const schedules = await VaccineSchedule.find({
         date: {
           $gte: today.subtract(1, 'day').toDate(),
@@ -24,7 +31,7 @@ const createVaccineReminderJob = () => {
       });
       await Promise.all(
         schedules.map(async (item) => {
-          const targetDay = dayjs(item.date).startOf('day');
+          const targetDay = dayjs.tz(item.date, VIETNAM_TZ).startOf('day');
           const diff = targetDay.diff(today, 'day');
           if (diff === 3 && !item.reminders.pre3d) {
             await safeSendMessage(
@@ -54,7 +61,7 @@ const createVaccineReminderJob = () => {
 };
 
 /**
- * Job nhắc Vitamin D (7h sáng hàng ngày)
+ * Job nhắc Vitamin D (7h sáng hàng ngày theo giờ Việt Nam)
  */
 const createVitaminReminderJob = () => {
   return cron.schedule(
@@ -78,7 +85,7 @@ const createVitaminReminderJob = () => {
 };
 
 /**
- * Job gửi lịch chăm bé (6h sáng hàng ngày)
+ * Job gửi lịch chăm bé (6h sáng hàng ngày theo giờ Việt Nam)
  */
 const createScheduleMorningJob = () => {
   return cron.schedule(
@@ -103,7 +110,7 @@ const createScheduleMorningJob = () => {
 };
 
 /**
- * Job báo cáo giấc ngủ tuần (20h Chủ nhật)
+ * Job báo cáo giấc ngủ tuần (20h Chủ nhật theo giờ Việt Nam)
  */
 const createWeeklySleepJob = () => {
   return cron.schedule(
@@ -155,4 +162,3 @@ export const stopAllJobs = () => {
 };
 
 export default { startAllJobs, stopAllJobs };
-

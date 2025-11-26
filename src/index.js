@@ -11,6 +11,9 @@
  * └── utils/           - Formatters, validators, helpers
  */
 
+// Set timezone Việt Nam cho toàn bộ ứng dụng
+process.env.TZ = 'Asia/Ho_Chi_Minh';
+
 import { config } from './config/index.js';
 import { connectDb, disconnectDb } from './database/connection.js';
 import { bot } from './bot/index.js';
@@ -34,6 +37,7 @@ const bootstrap = async () => {
 
     console.info('🤖 Bot đã sẵn sàng phục vụ bố/mẹ!');
     console.info(`📍 Environment: ${config.nodeEnv}`);
+    console.info(`🕐 Timezone: ${process.env.TZ || 'Asia/Ho_Chi_Minh'}`);
   } catch (error) {
     console.error('❌ Lỗi khởi động:', error);
     process.exit(1);

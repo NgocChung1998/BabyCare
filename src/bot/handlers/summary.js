@@ -1,10 +1,17 @@
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc.js';
+import timezone from 'dayjs/plugin/timezone.js';
 import { bot, safeSendMessage } from '../index.js';
 import { Feeding, SleepSession, PottyLog, DiaperLog, SupplementLog } from '../../database/models/index.js';
 import { mainKeyboard } from '../keyboard.js';
 import { CONSTANTS } from '../../config/index.js';
 import { clearState } from '../../utils/stateManager.js';
 import { sleepSessionTracker } from './sleep.js';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+const VIETNAM_TZ = 'Asia/Ho_Chi_Minh';
 
 /**
  * Lấy trạng thái ngủ hiện tại
@@ -22,9 +29,9 @@ const getCurrentSleepStatus = (chatId) => {
  * Tóm tắt ngày với thông tin chi tiết
  */
 const summarizeDay = async (chatId) => {
-  const start = dayjs().startOf('day').toDate();
-  const end = dayjs().endOf('day').toDate();
-  const now = dayjs();
+  const now = dayjs.tz(dayjs(), VIETNAM_TZ);
+  const start = now.startOf('day').toDate();
+  const end = now.endOf('day').toDate();
 
   const [feedings, sleeps, potty, diapers, supplements] = await Promise.all([
     Feeding.find({ chatId, recordedAt: { $gte: start, $lte: end } }),
@@ -56,7 +63,7 @@ const summarizeDay = async (chatId) => {
   lines.push('😴 TRẠNG THÁI NGỦ:');
   
   if (sleepStatus.isSleeping) {
-    const startStr = dayjs(sleepStatus.startTime).format('HH:mm');
+    const startStr = dayjs.tz(sleepStatus.startTime, VIETNAM_TZ).format('HH:mm');
     const elapsed = sleepStatus.elapsedMinutes;
     const elapsedHours = Math.floor(elapsed / 60);
     const elapsedMins = elapsed % 60;
@@ -84,7 +91,7 @@ const summarizeDay = async (chatId) => {
     lines.push('⚪ ĐANG THỨC');
     lines.push('');
     if (lastSleep) {
-      const lastEndStr = dayjs(lastSleep.end).format('HH:mm');
+      const lastEndStr = dayjs.tz(lastSleep.end, VIETNAM_TZ).format('HH:mm');
       const lastHours = Math.floor(lastSleep.durationMinutes / 60);
       const lastMins = lastSleep.durationMinutes % 60;
       const lastDurationStr = lastHours > 0 
@@ -106,7 +113,7 @@ const summarizeDay = async (chatId) => {
   lines.push('🍼 THÔNG TIN ĂN:');
   
   if (lastFeed) {
-    const lastFeedTime = dayjs(lastFeed.recordedAt);
+    const lastFeedTime = dayjs.tz(lastFeed.recordedAt, VIETNAM_TZ);
     const lastFeedTimeStr = lastFeedTime.format('HH:mm');
     const hoursSinceFeed = now.diff(lastFeedTime, 'hour', true);
     

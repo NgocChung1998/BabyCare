@@ -1,21 +1,28 @@
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc.js';
+import timezone from 'dayjs/plugin/timezone.js';
 import { CONSTANTS, SLEEP_RECOMMENDATIONS, WEAN_SUGGESTIONS, GIFT_IDEAS } from '../config/index.js';
 
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+const VIETNAM_TZ = 'Asia/Ho_Chi_Minh';
+
 /**
- * Kiểm tra có phải giờ yên tĩnh không (23:00-06:00)
+ * Kiểm tra có phải giờ yên tĩnh không (23:00-06:00) theo giờ Việt Nam
  * @returns {boolean}
  */
 export const isQuietHours = () => {
-  const hour = dayjs().hour();
+  const hour = dayjs.tz(dayjs(), VIETNAM_TZ).hour();
   return hour >= 23 || hour < 6;
 };
 
 /**
- * Tính số ms đến 6h sáng
+ * Tính số ms đến 6h sáng theo giờ Việt Nam
  * @returns {number}
  */
 export const msUntilMorning = () => {
-  const now = dayjs();
+  const now = dayjs.tz(dayjs(), VIETNAM_TZ);
   const nextMorning =
     now.hour() < 6 ? now.hour(6).minute(0).second(0) : now.add(1, 'day').hour(6).minute(0).second(0);
   return nextMorning.diff(now);
@@ -28,7 +35,7 @@ export const msUntilMorning = () => {
  */
 export const isNightSleep = (session) => {
   if (!session?.start) return false;
-  const hour = dayjs(session.start).hour();
+  const hour = dayjs.tz(session.start, VIETNAM_TZ).hour();
   return hour >= 19 || hour < 6;
 };
 
@@ -88,4 +95,3 @@ export const randomDiaperDelayMs = () => {
     CONSTANTS.DIAPER_MIN_MINUTES;
   return minutes * 60 * 1000;
 };
-

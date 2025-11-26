@@ -1,4 +1,11 @@
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc.js';
+import timezone from 'dayjs/plugin/timezone.js';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+const VIETNAM_TZ = 'Asia/Ho_Chi_Minh';
 
 /**
  * Format số với số thập phân
@@ -25,8 +32,8 @@ export const formatMinutes = (minutes) => {
 export const formatAge = (dateOfBirth) => {
   if (!dateOfBirth) return null;
   
-  const now = dayjs();
-  const birth = dayjs(dateOfBirth);
+  const now = dayjs.tz(dayjs(), VIETNAM_TZ);
+  const birth = dayjs.tz(dateOfBirth, VIETNAM_TZ);
   
   let years = now.diff(birth, 'year');
   let months = now.diff(birth.add(years, 'year'), 'month');
@@ -59,7 +66,7 @@ export const formatAge = (dateOfBirth) => {
  */
 export const formatSleepStatus = (isSleeping, startTime, elapsedMinutes, lastSleep, lastFeed) => {
   if (isSleeping) {
-    const startStr = dayjs(startTime).format('HH:mm');
+    const startStr = dayjs.tz(startTime, VIETNAM_TZ).format('HH:mm');
     const elapsedHours = Math.floor(elapsedMinutes / 60);
     const elapsedMins = elapsedMinutes % 60;
     const elapsedStr = elapsedHours > 0 
@@ -78,7 +85,7 @@ export const formatSleepStatus = (isSleeping, startTime, elapsedMinutes, lastSle
     const details = [];
     
     if (lastSleep) {
-      const lastEndStr = dayjs(lastSleep.end).format('HH:mm');
+      const lastEndStr = dayjs.tz(lastSleep.end, VIETNAM_TZ).format('HH:mm');
       const lastHours = Math.floor(lastSleep.durationMinutes / 60);
       const lastMins = lastSleep.durationMinutes % 60;
       const lastDurationStr = lastHours > 0 
@@ -90,7 +97,7 @@ export const formatSleepStatus = (isSleeping, startTime, elapsedMinutes, lastSle
     }
     
     if (lastFeed) {
-      const lastFeedTime = dayjs(lastFeed.recordedAt).format('HH:mm');
+      const lastFeedTime = dayjs.tz(lastFeed.recordedAt, VIETNAM_TZ).format('HH:mm');
       details.push(`🍼 Vừa ăn lúc: ${lastFeedTime} (${lastFeed.amountMl}ml)`);
     }
     
