@@ -335,13 +335,17 @@ export const registerSyncHandler = () => {
     }
     
     if (state?.type === 'sync_input_name') {
-      clearState(chatId);
       const displayName = text.trim().slice(0, 20);
-      if (state.action === 'create') {
+      const action = state.action; // Lưu action trước khi clear
+      clearState(chatId);
+      
+      if (action === 'create') {
         await handleCreateGroup(chatId, displayName);
-      } else if (state.action === 'join') {
+      } else if (action === 'join') {
         setState(chatId, { type: 'sync_input_code', displayName });
         await safeSendMessage(chatId, '🔑 Nhập mã nhóm (6 ký tự):');
+      } else {
+        await showSyncMenu(chatId);
       }
       return;
     }
@@ -426,14 +430,19 @@ export const registerSyncHandler = () => {
       const displayName = query.data.replace('sync_name_', '');
       await bot.answerCallbackQuery(query.id, { text: displayName });
       
+      // Lấy state TRƯỚC khi clear
       const state = getState(chatId);
+      const action = state?.action;
       clearState(chatId);
       
-      if (state?.action === 'create') {
+      if (action === 'create') {
         await handleCreateGroup(chatId, displayName);
-      } else if (state?.action === 'join') {
+      } else if (action === 'join') {
         setState(chatId, { type: 'sync_input_code', displayName });
         await safeSendMessage(chatId, '🔑 Nhập mã nhóm (6 ký tự):');
+      } else {
+        // Nếu không có action, quay lại menu
+        await showSyncMenu(chatId);
       }
       return;
     }
