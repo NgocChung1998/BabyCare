@@ -317,8 +317,8 @@ const showRoutineMenu = async (chatId) => {
   // Tạo inline keyboard với các liên kết
   const routineButtons = [
     [
-      { text: '🍼 Xem lịch ăn', callback_data: 'routine_feeding' },
-      { text: '😴 Xem lịch ngủ', callback_data: 'routine_sleep' }
+      { text: '🍼 Xem lịch ăn', callback_data: 'routine_feeds' },
+      { text: '😴 Xem lịch ngủ', callback_data: 'routine_sleeps' }
     ],
     [
       { text: isSleeping ? '⏹️ Bé đã dậy' : '▶️ Cho bé ngủ', callback_data: isSleeping ? 'sleep_confirm_stop' : 'sleep_confirm_start' }
@@ -484,7 +484,7 @@ const showFeedingSchedule = async (chatId) => {
   ]);
   feedButtons.push([
     { text: '😴 Nhật ký ngủ', callback_data: 'go_sleep' },
-    { text: '😴 Xem lịch ngủ', callback_data: 'routine_sleep' }
+    { text: '😴 Xem lịch ngủ', callback_data: 'routine_sleeps' }
   ]);
   
   await safeSendMessage(chatId, lines.join('\n'), buildInlineKeyboard(feedButtons));
@@ -713,7 +713,7 @@ const showSleepSchedule = async (chatId) => {
   ]);
   sleepButtons.push([
     { text: '🍼 Ghi cữ ăn', callback_data: 'go_milk' },
-    { text: '🍼 Xem lịch ăn', callback_data: 'routine_feeding' }
+    { text: '🍼 Xem lịch ăn', callback_data: 'routine_feeds' }
   ]);
   
   await safeSendMessage(chatId, lines.join('\n'), buildInlineKeyboard(sleepButtons));
