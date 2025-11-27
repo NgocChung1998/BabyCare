@@ -6,6 +6,7 @@ import { formatMinutes } from '../../utils/formatters.js';
 import { isNightSleep, getSleepGuideline } from '../../utils/helpers.js';
 import { clearState, setState, getState } from '../../utils/stateManager.js';
 import { getGroupChatIds, notifySyncMembers } from './sync.js';
+import { setAwakeReminder, setSleepReminder, clearAwakeReminder, clearSleepReminder } from '../../services/reminderService.js';
 
 // Export sleepSessionTracker để summary.js có thể sử dụng
 export const sleepSessionTracker = new Map();
@@ -345,6 +346,20 @@ const confirmSleepStop = async (chatId) => {
 };
 
 /**
+ * Gửi nhắc nhở cho cả nhóm
+ */
+const sendReminderToGroup = async (chatId, message) => {
+  const groupChatIds = await getGroupChatIds(chatId);
+  for (const memberId of groupChatIds) {
+    try {
+      await safeSendMessage(memberId, message, mainKeyboard);
+    } catch (err) {
+      console.error(`[Sleep] Error sending reminder to ${memberId}:`, err.message);
+    }
+  }
+};
+
+/**
  * Bắt đầu ngủ với thời gian cụ thể
  */
 const handleSleepStart = async (chatId, timeStr = null) => {
@@ -369,6 +384,19 @@ const handleSleepStart = async (chatId, timeStr = null) => {
   // Lưu vào cả memory tracker VÀ database để persist khi restart
   await setOngoingSleep(primaryChatId, startTime);
   const displayTime = dayjs(startTime).format('HH:mm');
+  
+  // Xóa timer nhắc thức (vì bé đã ngủ)
+  clearAwakeReminder(primaryChatId);
+  
+  // Lấy tuổi bé để set reminder ngủ
+  const profile = await ChatProfile.findOne({ chatId: { $in: groupChatIds }, dateOfBirth: { $exists: true } });
+  if (profile?.dateOfBirth) {
+    const ageMonths = dayjs().diff(dayjs(profile.dateOfBirth), 'month');
+    // Đặt timer nhắc khi bé ngủ quá lâu (chỉ cho giấc nap, không nhắc giấc đêm)
+    setSleepReminder(primaryChatId, startTime, ageMonths, async (message) => {
+      await sendReminderToGroup(chatId, message);
+    });
+  }
   
   await safeSendMessage(
     chatId,
@@ -423,6 +451,19 @@ const handleSleepStop = async (chatId, endTimeStr = null) => {
   await SleepSession.create({ chatId: primaryChatId, start, end, durationMinutes });
   // Xóa khỏi cả memory tracker VÀ database
   await clearOngoingSleep(primaryChatId);
+  
+  // Xóa timer nhắc ngủ (vì bé đã dậy)
+  clearSleepReminder(primaryChatId);
+  
+  // Lấy tuổi bé để set reminder thức
+  const profile = await ChatProfile.findOne({ chatId: { $in: groupChatIds }, dateOfBirth: { $exists: true } });
+  if (profile?.dateOfBirth) {
+    const ageMonths = dayjs().diff(dayjs(profile.dateOfBirth), 'month');
+    // Đặt timer nhắc khi bé thức quá lâu
+    setAwakeReminder(primaryChatId, end, ageMonths, async (message) => {
+      await sendReminderToGroup(chatId, message);
+    });
+  }
 
   const startStr = dayjs(start).format('HH:mm');
   const endStr = dayjs(end).format('HH:mm');

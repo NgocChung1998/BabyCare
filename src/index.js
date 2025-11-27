@@ -16,10 +16,30 @@ process.env.TZ = 'Asia/Ho_Chi_Minh';
 
 import { config } from './config/index.js';
 import { connectDb, disconnectDb } from './database/connection.js';
-import { bot } from './bot/index.js';
+import { bot, safeSendMessage } from './bot/index.js';
 import { registerAllHandlers } from './bot/handlers/index.js';
 import { startAllJobs, stopAllJobs } from './jobs/index.js';
-import { clearAllReminders } from './services/reminderService.js';
+import { clearAllReminders, initializeRemindersFromDb } from './services/reminderService.js';
+import { mainKeyboard } from './bot/keyboard.js';
+import { getGroupChatIds } from './bot/handlers/sync.js';
+
+/**
+ * Gửi nhắc nhở cho cả nhóm (dùng chung cho milk, diaper, sleep, awake)
+ */
+const sendReminderToGroup = async (primaryChatId, message) => {
+  try {
+    const groupChatIds = await getGroupChatIds(primaryChatId);
+    for (const memberId of groupChatIds) {
+      try {
+        await safeSendMessage(memberId, message, mainKeyboard);
+      } catch (err) {
+        console.error(`[Init] Error sending reminder to ${memberId}:`, err.message);
+      }
+    }
+  } catch (error) {
+    console.error('[Init] Error in sendReminderToGroup:', error);
+  }
+};
 
 /**
  * Khởi động bot
@@ -34,6 +54,9 @@ const bootstrap = async () => {
 
     // Khởi động cron jobs
     startAllJobs();
+    
+    // Khởi tạo lại reminders từ database
+    await initializeRemindersFromDb(sendReminderToGroup);
 
     console.info('🤖 Bot đã sẵn sàng phục vụ bố/mẹ!');
     console.info(`📍 Environment: ${config.nodeEnv}`);

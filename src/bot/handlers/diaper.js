@@ -51,13 +51,12 @@ const handleDiaperLog = async (chatId) => {
   const groupChatIds = await getGroupChatIds(chatId);
   const primaryChatId = groupChatIds[0];
   
-  await DiaperLog.create({ chatId: primaryChatId });
+  const recordedAt = new Date();
+  await DiaperLog.create({ chatId: primaryChatId, recordedAt });
   
-  // Đặt nhắc sau 3-4 tiếng cho cả nhóm
-  setDiaperReminder(primaryChatId, () => {
-    sendDiaperReminderToGroup(chatId, '🧷 Đã 3-4 tiếng rồi, bố/mẹ kiểm tra tã cho bé nhé!').catch((error) =>
-      console.error('Lỗi nhắc tã:', error)
-    );
+  // Đặt nhiều nhắc cho cả nhóm
+  setDiaperReminder(primaryChatId, recordedAt, async (message) => {
+    await sendDiaperReminderToGroup(chatId, message);
   });
 
   const today = await DiaperLog.countDocuments({
@@ -67,7 +66,7 @@ const handleDiaperLog = async (chatId) => {
 
   await safeSendMessage(
     chatId,
-    `🧷 Đã ghi nhận thay tã! (Hôm nay: ${today} lần)\n\n🔔 Em sẽ nhắc sau 3-4 tiếng nữa nhé!\n\n👇 Bấm nút để tiếp tục:`,
+    `🧷 Đã ghi nhận thay tã! (Hôm nay: ${today} lần)\n\n🔔 Em sẽ nhắc sau 2.5-4 tiếng nữa nhé!\n\n👇 Bấm nút để tiếp tục:`,
     diaperInlineKeyboard
   );
   
