@@ -145,19 +145,25 @@ export const VACCINATION_SCHEDULE = [
   { ageMonths: 6, name: 'Cúm mùa (tiêm nhắc hàng năm)', required: false, recurring: true, note: 'Tiêm nhắc 1 mũi mỗi năm' }
 ];
 
-// ===== LỊCH ĂN NGỦ THEO ĐỘ TUỔI =====
+// ===== LỊCH ĂN NGỦ VÀ HOẠT ĐỘNG THEO ĐỘ TUỔI =====
 export const DAILY_SCHEDULE_BY_AGE = [
   {
     minMonths: 0, maxMonths: 3,
     feedingIntervalHours: 2.5,
     feeds: ['06:00', '08:30', '11:00', '13:30', '16:00', '18:30', '21:00', '00:00', '03:00'],
     sleeps: [
-      { start: '07:00', duration: 60, name: 'Nap 1' },
-      { start: '09:30', duration: 60, name: 'Nap 2' },
-      { start: '12:00', duration: 90, name: 'Nap 3' },
-      { start: '15:00', duration: 60, name: 'Nap 4' },
-      { start: '17:30', duration: 45, name: 'Nap 5' },
-      { start: '20:00', duration: 600, name: 'Ngủ đêm' }
+      { start: '07:00', duration: 60, name: '😴 Nap 1' },
+      { start: '09:30', duration: 60, name: '😴 Nap 2' },
+      { start: '12:00', duration: 90, name: '😴 Nap 3' },
+      { start: '15:00', duration: 60, name: '😴 Nap 4' },
+      { start: '17:30', duration: 45, name: '😴 Nap 5' },
+      { start: '20:00', duration: 600, name: '🌙 Ngủ đêm' }
+    ],
+    activities: [
+      { start: '08:00', duration: 15, name: '🎵 Nghe nhạc/hát ru' },
+      { start: '10:30', duration: 10, name: '🧸 Tummy time' },
+      { start: '14:00', duration: 15, name: '👀 Nhìn theo đồ vật' },
+      { start: '17:00', duration: 10, name: '🛁 Tắm/Massage' }
     ],
     totalSleep: '14-17h', nightSleep: '8-10h', naps: '4-6 giấc'
   },
@@ -166,10 +172,17 @@ export const DAILY_SCHEDULE_BY_AGE = [
     feedingIntervalHours: 3,
     feeds: ['06:00', '09:00', '12:00', '15:00', '18:00', '21:00', '03:00'],
     sleeps: [
-      { start: '08:00', duration: 90, name: 'Nap sáng' },
-      { start: '12:00', duration: 120, name: 'Nap trưa' },
-      { start: '16:00', duration: 60, name: 'Nap chiều' },
-      { start: '19:30', duration: 660, name: 'Ngủ đêm' }
+      { start: '08:00', duration: 90, name: '😴 Nap sáng' },
+      { start: '12:00', duration: 120, name: '😴 Nap trưa' },
+      { start: '16:00', duration: 60, name: '😴 Nap chiều' },
+      { start: '19:30', duration: 660, name: '🌙 Ngủ đêm' }
+    ],
+    activities: [
+      { start: '07:00', duration: 20, name: '🧸 Chơi trên thảm' },
+      { start: '10:00', duration: 15, name: '📖 Xem sách hình' },
+      { start: '14:00', duration: 20, name: '🤸 Vận động nhẹ' },
+      { start: '17:30', duration: 20, name: '🛁 Tắm' },
+      { start: '18:30', duration: 15, name: '👨‍👩‍👧 Thời gian với bố mẹ' }
     ],
     totalSleep: '14-16h', nightSleep: '10-12h', naps: '3-4 giấc'
   },
@@ -178,10 +191,17 @@ export const DAILY_SCHEDULE_BY_AGE = [
     feedingIntervalHours: 3.5,
     feeds: ['06:30', '10:00', '13:30', '17:00', '20:30'],
     sleeps: [
-      { start: '09:00', duration: 90, name: 'Nap sáng' },
-      { start: '13:00', duration: 120, name: 'Nap trưa' },
-      { start: '17:00', duration: 45, name: 'Nap chiều (nếu cần)' },
-      { start: '19:30', duration: 660, name: 'Ngủ đêm' }
+      { start: '09:00', duration: 90, name: '😴 Nap sáng' },
+      { start: '13:00', duration: 120, name: '😴 Nap trưa' },
+      { start: '17:00', duration: 45, name: '😴 Nap chiều (nếu cần)' },
+      { start: '19:30', duration: 660, name: '🌙 Ngủ đêm' }
+    ],
+    activities: [
+      { start: '07:30', duration: 30, name: '🧸 Chơi đồ chơi' },
+      { start: '10:30', duration: 20, name: '📖 Đọc sách' },
+      { start: '14:30', duration: 30, name: '🤸 Tập bò/ngồi' },
+      { start: '17:30', duration: 20, name: '🛁 Tắm' },
+      { start: '18:00', duration: 30, name: '👨‍👩‍👧 Chơi với bố mẹ' }
     ],
     totalSleep: '13-15h', nightSleep: '10-12h', naps: '2-3 giấc'
   },
@@ -190,9 +210,16 @@ export const DAILY_SCHEDULE_BY_AGE = [
     feedingIntervalHours: 3.5,
     feeds: ['07:00', '10:30', '14:00', '17:30', '20:00'],
     sleeps: [
-      { start: '09:30', duration: 90, name: 'Nap sáng' },
-      { start: '14:00', duration: 120, name: 'Nap trưa' },
-      { start: '19:30', duration: 660, name: 'Ngủ đêm' }
+      { start: '09:30', duration: 90, name: '😴 Nap sáng' },
+      { start: '14:00', duration: 120, name: '😴 Nap trưa' },
+      { start: '19:30', duration: 660, name: '🌙 Ngủ đêm' }
+    ],
+    activities: [
+      { start: '08:00', duration: 30, name: '🧸 Chơi tự do' },
+      { start: '11:00', duration: 20, name: '📖 Đọc sách/hát' },
+      { start: '15:00', duration: 30, name: '🤸 Tập đứng/đi' },
+      { start: '17:30', duration: 20, name: '🛁 Tắm' },
+      { start: '18:30', duration: 30, name: '🎨 Vẽ/Lắp ghép' }
     ],
     totalSleep: '12-15h', nightSleep: '10-12h', naps: '2 giấc'
   },
@@ -201,8 +228,17 @@ export const DAILY_SCHEDULE_BY_AGE = [
     feedingIntervalHours: 4,
     feeds: ['07:00', '11:00', '15:00', '19:00'],
     sleeps: [
-      { start: '12:30', duration: 120, name: 'Nap trưa' },
-      { start: '19:30', duration: 660, name: 'Ngủ đêm' }
+      { start: '12:30', duration: 120, name: '😴 Nap trưa' },
+      { start: '19:30', duration: 660, name: '🌙 Ngủ đêm' }
+    ],
+    activities: [
+      { start: '08:00', duration: 45, name: '🧸 Chơi tự do' },
+      { start: '09:30', duration: 30, name: '🤸 Vận động/đi dạo' },
+      { start: '10:30', duration: 20, name: '📖 Đọc sách' },
+      { start: '14:30', duration: 30, name: '🎨 Hoạt động sáng tạo' },
+      { start: '16:00', duration: 30, name: '🏃 Chơi ngoài trời' },
+      { start: '17:30', duration: 20, name: '🛁 Tắm' },
+      { start: '18:30', duration: 30, name: '👨‍👩‍👧 Chơi với bố mẹ' }
     ],
     totalSleep: '12-14h', nightSleep: '11-12h', naps: '1-2 giấc'
   },
@@ -211,8 +247,19 @@ export const DAILY_SCHEDULE_BY_AGE = [
     feedingIntervalHours: 4,
     feeds: ['07:00', '11:30', '15:30', '19:00'],
     sleeps: [
-      { start: '13:00', duration: 90, name: 'Nap trưa' },
-      { start: '20:00', duration: 600, name: 'Ngủ đêm' }
+      { start: '13:00', duration: 90, name: '😴 Nap trưa' },
+      { start: '20:00', duration: 600, name: '🌙 Ngủ đêm' }
+    ],
+    activities: [
+      { start: '08:00', duration: 45, name: '🧸 Chơi tự do' },
+      { start: '09:00', duration: 30, name: '🏃 Thể dục/vận động' },
+      { start: '10:00', duration: 30, name: '📖 Đọc sách/kể chuyện' },
+      { start: '11:00', duration: 30, name: '🎨 Vẽ/tô màu' },
+      { start: '14:30', duration: 45, name: '🧩 Xếp hình/lego' },
+      { start: '16:00', duration: 45, name: '🌳 Chơi ngoài trời' },
+      { start: '17:30', duration: 30, name: '🛁 Tắm' },
+      { start: '18:30', duration: 30, name: '👨‍👩‍👧 Chơi với bố mẹ' },
+      { start: '19:30', duration: 20, name: '📚 Đọc truyện trước khi ngủ' }
     ],
     totalSleep: '11-13h', nightSleep: '10-11h', naps: '1 giấc'
   }

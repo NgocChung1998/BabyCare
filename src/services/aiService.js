@@ -117,35 +117,34 @@ Trả lời bằng tiếng Việt với emoji sinh động!`;
 
 /**
  * Gợi ý menu ăn dặm bằng AI theo tháng tuổi (tiếng Việt)
+ * Format dễ parse để có thể thêm vào database
  * @param {number} months - Số tháng tuổi
  * @returns {Promise<string>}
  */
 export const suggestWeanMenuWithAI = async (months) => {
-  const prompt = `Bạn là chuyên gia dinh dưỡng trẻ em với kinh nghiệm tại Việt Nam.
-Hãy gợi ý thực đơn ăn dặm cho bé ${months} tháng tuổi:
+  const prompt = `Bạn là chuyên gia dinh dưỡng trẻ em Việt Nam.
+Gợi ý 5 MÓN ĂN DẶM cho bé ${months} tháng tuổi.
 
-🍽️ **THỰC ĐƠN ĂN DẶM:**
+QUAN TRỌNG: Trả lời ĐÚNG ĐỊNH DẠNG sau (mỗi món trên 1 dòng, bắt đầu bằng emoji 🍽️):
 
-1. 🍲 **3 món chính phù hợp:**
-   - Tên món + nguyên liệu Việt Nam dễ tìm
-   - Công thức ngắn gọn (5-7 bước)
-   - Độ mịn/thô phù hợp ${months} tháng
+🍽️ Cháo bí đỏ - Bí đỏ nghiền mịn, dễ tiêu
+🍽️ Cháo thịt gà - Thịt gà xay nhuyễn, bổ protein
+🍽️ Bột yến mạch chuối - Yến mạch + chuối chín, giàu chất xơ
+🍽️ Khoai lang nghiền - Khoai lang hấp, vị ngọt tự nhiên
+🍽️ Súp rau củ - Cà rốt, bí xanh, khoai tây xay nhuyễn
 
-2. 🥤 **2 món phụ/snack lành mạnh:**
-   - Dễ làm, bé thích
-   - Bổ sung dinh dưỡng
+Sau đó thêm:
 
-3. 📊 **Khẩu phần gợi ý:**
-   - Lượng ăn phù hợp cho bé ${months} tháng
-   - Số bữa/ngày
-   - Kết hợp với sữa mẹ/sữa công thức
+📊 KHẨU PHẦN (${months} tháng):
+- Số bữa/ngày: X bữa
+- Lượng/bữa: XX-XXml
+- Kết hợp: Sữa mẹ/công thức
 
-4. ⚠️ **Lưu ý quan trọng:**
-   - Thực phẩm cần tránh ở độ tuổi này
-   - Cách theo dõi dị ứng (quy tắc 3 ngày)
-   - Dấu hiệu bé sẵn sàng ăn dặm
+⚠️ LƯU Ý:
+- Thực phẩm cần tránh
+- Quy tắc 3 ngày thử món mới
 
-Trả lời bằng tiếng Việt, thực tế và dễ áp dụng!`;
+Chỉ gợi ý món PHÙ HỢP ${months} tháng tuổi. Trả lời tiếng Việt!`;
   return askGemini(prompt);
 };
 

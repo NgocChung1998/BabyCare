@@ -257,21 +257,60 @@ const handleAddFromSuggestion = async (chatId) => {
   // Parse gợi ý để lấy danh sách món
   const { suggestion } = suggestionData;
   
-  // Tách các món từ gợi ý (giả sử mỗi món trên một dòng hoặc có dấu •)
+  // Tìm các dòng bắt đầu bằng 🍽️
   const dishes = suggestion
     .split('\n')
     .map(line => line.trim())
-    .filter(line => line && !line.startsWith('━━') && !line.startsWith('📋') && !line.startsWith('💡'))
+    .filter(line => line.startsWith('🍽️'))
     .map(line => {
-      // Loại bỏ số thứ tự, bullet points, emoji
-      return line
-        .replace(/^\d+[\.\)]\s*/, '')
-        .replace(/^[•\-\*]\s*/, '')
-        .replace(/^[🔥🍼🥄🥣🍲🥗]/g, '')
-        .trim();
+      // Lấy phần sau emoji 🍽️
+      let dish = line.replace(/^🍽️\s*/, '').trim();
+      // Tách tên món và mô tả (nếu có dấu -)
+      const parts = dish.split(' - ');
+      return {
+        name: parts[0]?.trim() || dish,
+        note: parts[1]?.trim() || null
+      };
     })
-    .filter(line => line.length > 0 && line.length < 100); // Lọc món hợp lệ
+    .filter(d => d.name && d.name.length > 0 && d.name.length < 100);
     
+  if (dishes.length === 0) {
+    // Fallback: thử parse theo format cũ
+    const fallbackDishes = suggestion
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => {
+        // Tìm dòng có vẻ là món ăn
+        return line && 
+               !line.startsWith('━━') && 
+               !line.startsWith('📊') && 
+               !line.startsWith('⚠️') &&
+               !line.startsWith('💡') &&
+               !line.includes('tháng') &&
+               !line.includes('bữa/ngày') &&
+               line.length > 3 && 
+               line.length < 80;
+      })
+      .map(line => {
+        // Loại bỏ bullet points, số thứ tự
+        let clean = line
+          .replace(/^\d+[\.\)]\s*/, '')
+          .replace(/^[•\-\*]\s*/, '')
+          .replace(/^[🔥🍼🥄🥣🍲🥗🍽️]\s*/g, '')
+          .trim();
+        const parts = clean.split(' - ');
+        return {
+          name: parts[0]?.trim() || clean,
+          note: parts[1]?.trim() || null
+        };
+      })
+      .filter(d => d.name && d.name.length > 0 && d.name.length < 80);
+      
+    if (fallbackDishes.length > 0) {
+      dishes.push(...fallbackDishes.slice(0, 5));
+    }
+  }
+  
   if (dishes.length === 0) {
     await safeSendMessage(
       chatId,
@@ -283,16 +322,19 @@ const handleAddFromSuggestion = async (chatId) => {
   
   // Thêm từng món vào database
   let addedCount = 0;
-  for (const dish of dishes.slice(0, 10)) { // Giới hạn 10 món
+  const addedDishes = [];
+  
+  for (const dish of dishes.slice(0, 5)) { // Giới hạn 5 món
     try {
       await FoodLog.create({
         chatId,
-        dishName: dish,
-        note: `Từ gợi ý AI (${suggestionData.ageMonths} tháng)`
+        dishName: dish.name,
+        note: dish.note || `Từ gợi ý AI (${suggestionData.ageMonths} tháng)`
       });
       addedCount++;
+      addedDishes.push(dish.name);
     } catch (error) {
-      console.error(`Lỗi thêm món ${dish}:`, error);
+      console.error(`Lỗi thêm món ${dish.name}:`, error);
     }
   }
   
@@ -304,14 +346,20 @@ const handleAddFromSuggestion = async (chatId) => {
     '✅ ĐÃ THÊM MÓN TỪ GỢI Ý',
     '━━━━━━━━━━━━━━━━━━━━',
     '',
-    `🔥 Đã thêm ${addedCount} món vào danh sách`,
-    '',
-    '💡 Theo dõi phản ứng của bé trong 3 ngày nhé!',
-    '',
-    '━━━━━━━━━━━━━━━━━━━━',
-    '',
-    '👇 Bấm nút để tiếp tục:'
+    `🔥 Đã thêm ${addedCount} món:`,
+    ''
   ];
+  
+  addedDishes.forEach((name, i) => {
+    lines.push(`   ${i + 1}. ${name}`);
+  });
+  
+  lines.push('');
+  lines.push('💡 Theo dõi phản ứng của bé trong 3 ngày nhé!');
+  lines.push('');
+  lines.push('━━━━━━━━━━━━━━━━━━━━');
+  lines.push('');
+  lines.push('👇 Bấm nút để tiếp tục:');
   
   await safeSendMessage(
     chatId,
