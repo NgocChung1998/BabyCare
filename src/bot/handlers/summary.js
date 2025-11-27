@@ -7,6 +7,7 @@ import { mainKeyboard } from '../keyboard.js';
 import { CONSTANTS } from '../../config/index.js';
 import { clearState } from '../../utils/stateManager.js';
 import { sleepSessionTracker } from './sleep.js';
+import { getGroupChatIds } from './sync.js';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -16,11 +17,16 @@ const VIETNAM_TZ = 'Asia/Ho_Chi_Minh';
 /**
  * Lấy trạng thái ngủ hiện tại
  */
-const getCurrentSleepStatus = (chatId) => {
-  if (sleepSessionTracker.has(chatId)) {
-    const startTime = sleepSessionTracker.get(chatId);
-    const elapsed = Math.round((Date.now() - startTime.getTime()) / 60000);
-    return { isSleeping: true, startTime, elapsedMinutes: elapsed };
+const getCurrentSleepStatus = async (chatId) => {
+  // Kiểm tra cả primary chatId
+  const groupChatIds = await getGroupChatIds(chatId);
+  
+  for (const id of groupChatIds) {
+    if (sleepSessionTracker.has(id)) {
+      const startTime = sleepSessionTracker.get(id);
+      const elapsed = Math.round((Date.now() - startTime.getTime()) / 60000);
+      return { isSleeping: true, startTime, elapsedMinutes: elapsed };
+    }
   }
   return { isSleeping: false };
 };
@@ -32,13 +38,16 @@ const summarizeDay = async (chatId) => {
   const now = dayjs.tz(dayjs(), VIETNAM_TZ);
   const start = now.startOf('day').toDate();
   const end = now.endOf('day').toDate();
+  
+  // Lấy tất cả chatId trong nhóm
+  const groupChatIds = await getGroupChatIds(chatId);
 
   const [feedings, sleeps, potty, diapers, supplements] = await Promise.all([
-    Feeding.find({ chatId, recordedAt: { $gte: start, $lte: end } }),
-    SleepSession.find({ chatId, start: { $gte: start }, end: { $lte: end } }),
-    PottyLog.find({ chatId, recordedAt: { $gte: start, $lte: end } }),
-    DiaperLog.find({ chatId, recordedAt: { $gte: start, $lte: end } }),
-    SupplementLog.find({ chatId, recordedAt: { $gte: start, $lte: end } })
+    Feeding.find({ chatId: { $in: groupChatIds }, recordedAt: { $gte: start, $lte: end } }),
+    SleepSession.find({ chatId: { $in: groupChatIds }, start: { $gte: start }, end: { $lte: end } }),
+    PottyLog.find({ chatId: { $in: groupChatIds }, recordedAt: { $gte: start, $lte: end } }),
+    DiaperLog.find({ chatId: { $in: groupChatIds }, recordedAt: { $gte: start, $lte: end } }),
+    SupplementLog.find({ chatId: { $in: groupChatIds }, recordedAt: { $gte: start, $lte: end } })
   ]);
 
   const milkCount = feedings.length;
@@ -59,7 +68,7 @@ const summarizeDay = async (chatId) => {
   ];
 
   // ===== TRẠNG THÁI NGỦ HIỆN TẠI =====
-  const sleepStatus = getCurrentSleepStatus(chatId);
+  const sleepStatus = await getCurrentSleepStatus(chatId);
   lines.push('😴 TRẠNG THÁI NGỦ:');
   
   if (sleepStatus.isSleeping) {

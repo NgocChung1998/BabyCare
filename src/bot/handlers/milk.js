@@ -5,6 +5,7 @@ import { mainKeyboard, buildInlineKeyboard } from '../keyboard.js';
 import { clearState, setState, getState } from '../../utils/stateManager.js';
 import { setMilkReminder, clearMilkReminder } from '../../services/reminderService.js';
 import { sleepSessionTracker } from './sleep.js';
+import { getGroupChatIds, notifySyncMembers } from './sync.js';
 
 /**
  * Parse thời gian từ input đơn giản
@@ -82,7 +83,9 @@ const MILK_AMOUNTS = [120, 150, 170, 180, 200, 220, 250, 300];
  * Hiển thị menu ăn với trạng thái
  */
 const showMilkMenu = async (chatId) => {
-  const lastFeed = await Feeding.findOne({ chatId }).sort({ recordedAt: -1 });
+  // Lấy tất cả chatId trong nhóm để query dữ liệu chung
+  const groupChatIds = await getGroupChatIds(chatId);
+  const lastFeed = await Feeding.findOne({ chatId: { $in: groupChatIds } }).sort({ recordedAt: -1 });
   const isSleeping = sleepSessionTracker.has(chatId);
   
   const lines = [
@@ -154,24 +157,16 @@ const showMilkMenu = async (chatId) => {
  * Gửi nhắc nhở cho cả nhóm đồng bộ (nếu có)
  */
 const sendReminderToGroup = async (chatId, message) => {
-  // Gửi cho chatId chính
-  await safeSendMessage(chatId, message, mainKeyboard);
+  // Lấy tất cả chatId trong nhóm
+  const groupChatIds = await getGroupChatIds(chatId);
   
-  // Tìm nhóm và gửi cho các thành viên khác
-  try {
-    const group = await SyncGroup.findOne({ 
-      'members.chatId': chatId,
-      isActive: true 
-    });
-    
-    if (group) {
-      const otherMembers = group.members.filter(m => m.chatId !== chatId);
-      for (const member of otherMembers) {
-        await safeSendMessage(member.chatId, message, mainKeyboard);
-      }
+  // Gửi cho tất cả thành viên
+  for (const memberId of groupChatIds) {
+    try {
+      await safeSendMessage(memberId, message, mainKeyboard);
+    } catch (error) {
+      console.error(`[Milk] Error sending reminder to ${memberId}:`, error);
     }
-  } catch (error) {
-    console.error('[Milk] Error sending reminder to group:', error);
   }
 };
 
@@ -192,12 +187,17 @@ const handleMilkLog = async (chatId, amountMl, timeStr = null) => {
     recordedAt = new Date();
   }
   
-  await Feeding.create({ chatId, amountMl, recordedAt });
+  // Lấy primary chatId để lưu dữ liệu vào 1 nơi chung
+  const groupChatIds = await getGroupChatIds(chatId);
+  const primaryChatId = groupChatIds[0]; // chatId đầu tiên là primary
+  
+  await Feeding.create({ chatId: primaryChatId, amountMl, recordedAt });
   
   const timeDisplay = dayjs(recordedAt).format('HH:mm');
   
   // Đặt nhiều nhắc nhở với callback gửi tin nhắn cho cả nhóm
-  setMilkReminder(chatId, async (message) => {
+  // Dùng primaryChatId làm key để tránh duplicate reminders
+  setMilkReminder(primaryChatId, async (message) => {
     await sendReminderToGroup(chatId, message);
   });
   
@@ -221,6 +221,9 @@ const handleMilkLog = async (chatId, amountMl, timeStr = null) => {
   ];
   
   await safeSendMessage(chatId, lines.join('\n'), mainKeyboard);
+  
+  // Thông báo cho các thành viên khác trong nhóm
+  await notifySyncMembers(chatId, `Đã cho bé ăn ${amountMl}ml lúc ${timeDisplay}`);
 };
 
 /**

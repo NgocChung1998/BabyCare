@@ -5,18 +5,22 @@ import { growthInlineKeyboard } from '../keyboard.js';
 import { parseFloatStrict } from '../../utils/validators.js';
 import { formatNumber, formatAge } from '../../utils/formatters.js';
 import { clearState, setState, getState } from '../../utils/stateManager.js';
+import { getGroupChatIds, notifySyncMembers } from './sync.js';
 
 /**
  * Hiển thị menu thông tin bé
  */
 const showBabyInfoMenu = async (chatId) => {
-  const profile = await ChatProfile.findOne({ chatId });
-  const latestWeight = await GrowthLog.findOne({ chatId, weightKg: { $exists: true } }).sort({ recordedAt: -1 });
-  const latestHeight = await GrowthLog.findOne({ chatId, heightCm: { $exists: true } }).sort({ recordedAt: -1 });
+  // Lấy tất cả chatId trong nhóm
+  const groupChatIds = await getGroupChatIds(chatId);
+  
+  const profile = await ChatProfile.findOne({ chatId: { $in: groupChatIds } });
+  const latestWeight = await GrowthLog.findOne({ chatId: { $in: groupChatIds }, weightKg: { $exists: true } }).sort({ recordedAt: -1 });
+  const latestHeight = await GrowthLog.findOne({ chatId: { $in: groupChatIds }, heightCm: { $exists: true } }).sort({ recordedAt: -1 });
   
   // Lấy lịch tiêm sắp đến
   const upcomingVaccine = await VaccineSchedule.findOne({
-    chatId,
+    chatId: { $in: groupChatIds },
     date: { $gte: new Date() }
   }).sort({ date: 1 });
 

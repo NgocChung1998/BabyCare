@@ -5,6 +5,7 @@ import { mainKeyboard, buildInlineKeyboard } from '../keyboard.js';
 import { formatMinutes } from '../../utils/formatters.js';
 import { isNightSleep, getSleepGuideline } from '../../utils/helpers.js';
 import { clearState, setState, getState } from '../../utils/stateManager.js';
+import { getGroupChatIds, notifySyncMembers } from './sync.js';
 
 // Export sleepSessionTracker để summary.js có thể sử dụng
 export const sleepSessionTracker = new Map();
@@ -103,9 +104,11 @@ const generateTimeButtons = (minutesBefore = 25, stepMinutes = 5, type = 'sleep'
  * Hiển thị menu ngủ với trạng thái - KHÔNG thực hiện hành động luôn
  */
 const showSleepMenu = async (chatId) => {
-  const status = getSleepStatus(chatId);
-  const lastSleep = await SleepSession.findOne({ chatId }).sort({ end: -1 });
-  const lastFeed = await Feeding.findOne({ chatId }).sort({ recordedAt: -1 });
+  // Lấy tất cả chatId trong nhóm để query dữ liệu chung
+  const groupChatIds = await getGroupChatIds(chatId);
+  const status = getSleepStatus(chatId) || getSleepStatus(groupChatIds[0]); // Check cả primary
+  const lastSleep = await SleepSession.findOne({ chatId: { $in: groupChatIds } }).sort({ end: -1 });
+  const lastFeed = await Feeding.findOne({ chatId: { $in: groupChatIds } }).sort({ recordedAt: -1 });
   
   const lines = [
     '━━━━━━━━━━━━━━━━━━━━',
@@ -219,7 +222,11 @@ const confirmSleepStop = async (chatId) => {
  * Bắt đầu ngủ với thời gian cụ thể
  */
 const handleSleepStart = async (chatId, timeStr = null) => {
-  const status = getSleepStatus(chatId);
+  // Lấy primary chatId để dùng chung tracker
+  const groupChatIds = await getGroupChatIds(chatId);
+  const primaryChatId = groupChatIds[0];
+  
+  const status = getSleepStatus(primaryChatId);
   if (status.isSleeping) {
     await safeSendMessage(chatId, '⚠️ Bé đang ngủ rồi! Bấm "Kết thúc ngủ" khi bé dậy nhé.', mainKeyboard);
     return;
@@ -233,7 +240,8 @@ const handleSleepStart = async (chatId, timeStr = null) => {
     startTime = new Date();
   }
   
-  sleepSessionTracker.set(chatId, startTime);
+  // Dùng primaryChatId làm key cho tracker
+  sleepSessionTracker.set(primaryChatId, startTime);
   const displayTime = dayjs(startTime).format('HH:mm');
   
   await safeSendMessage(
@@ -244,13 +252,20 @@ const handleSleepStart = async (chatId, timeStr = null) => {
     `📝 Khi bé dậy, bấm nút "😴 Nhật ký ngủ"`,
     mainKeyboard
   );
+  
+  // Thông báo cho các thành viên khác
+  await notifySyncMembers(chatId, `Bé bắt đầu ngủ lúc ${displayTime}`);
 };
 
 /**
  * Kết thúc ngủ với thời gian cụ thể
  */
 const handleSleepStop = async (chatId, endTimeStr = null) => {
-  const status = getSleepStatus(chatId);
+  // Lấy primary chatId để dùng chung tracker
+  const groupChatIds = await getGroupChatIds(chatId);
+  const primaryChatId = groupChatIds[0];
+  
+  const status = getSleepStatus(primaryChatId);
   if (!status.isSleeping) {
     await safeSendMessage(chatId, '⚠️ Bé không đang ngủ!', mainKeyboard);
     return;
@@ -278,8 +293,9 @@ const handleSleepStop = async (chatId, endTimeStr = null) => {
     return;
   }
   
-  await SleepSession.create({ chatId, start, end, durationMinutes });
-  sleepSessionTracker.delete(chatId);
+  // Lưu với primaryChatId để dữ liệu tập trung
+  await SleepSession.create({ chatId: primaryChatId, start, end, durationMinutes });
+  sleepSessionTracker.delete(primaryChatId);
 
   const startStr = dayjs(start).format('HH:mm');
   const endStr = dayjs(end).format('HH:mm');
@@ -303,6 +319,9 @@ const handleSleepStop = async (chatId, endTimeStr = null) => {
   ];
 
   await safeSendMessage(chatId, lines.join('\n'), mainKeyboard);
+  
+  // Thông báo cho các thành viên khác
+  await notifySyncMembers(chatId, `Bé đã dậy! Ngủ ${durationStr} (${startStr} → ${endStr})`);
 };
 
 /**

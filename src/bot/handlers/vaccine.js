@@ -8,6 +8,7 @@ import { parseDate } from '../../utils/validators.js';
 import { clearState, setState, getState } from '../../utils/stateManager.js';
 import { generateVaccinationSchedule } from '../../services/routineService.js';
 import { formatAge } from '../../utils/formatters.js';
+import { getGroupChatIds, notifySyncMembers } from './sync.js';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -26,24 +27,27 @@ const commonVaccines = [
 const showVaccineMenu = async (chatId) => {
   const now = dayjs.tz(dayjs(), VIETNAM_TZ);
   
-  // Lấy thông tin bé
-  const profile = await ChatProfile.findOne({ chatId });
+  // Lấy tất cả chatId trong nhóm
+  const groupChatIds = await getGroupChatIds(chatId);
+  
+  // Lấy thông tin bé từ primary chatId
+  const profile = await ChatProfile.findOne({ chatId: { $in: groupChatIds } });
   let babyInfo = '';
   if (profile?.dateOfBirth) {
     const ageText = formatAge(profile.dateOfBirth);
     babyInfo = `👶 Tuổi bé: ${ageText}\n\n`;
   }
   
-  // Đếm vaccine
+  // Đếm vaccine (từ tất cả thành viên trong nhóm)
   const [totalCount, completedCount, upcomingCount] = await Promise.all([
-    VaccineSchedule.countDocuments({ chatId }),
-    VaccineSchedule.countDocuments({ chatId, completed: true }),
-    VaccineSchedule.countDocuments({ chatId, completed: false, date: { $gte: now.toDate() } })
+    VaccineSchedule.countDocuments({ chatId: { $in: groupChatIds } }),
+    VaccineSchedule.countDocuments({ chatId: { $in: groupChatIds }, completed: true }),
+    VaccineSchedule.countDocuments({ chatId: { $in: groupChatIds }, completed: false, date: { $gte: now.toDate() } })
   ]);
   
   // Lấy lịch tiêm sắp tới
   const upcoming = await VaccineSchedule.find({
-    chatId,
+    chatId: { $in: groupChatIds },
     completed: false,
     date: { $gte: now.subtract(7, 'day').toDate() }
   }).sort({ date: 1 }).limit(5);
