@@ -10,4 +10,5 @@ export { DailySchedule } from './DailySchedule.js';
 export { FoodLog } from './FoodLog.js';
 export { PhotoAnalysisLog } from './PhotoAnalysisLog.js';
 export { DailyRoutine } from './DailyRoutine.js';
+export { SyncGroup } from './SyncGroup.js';
 

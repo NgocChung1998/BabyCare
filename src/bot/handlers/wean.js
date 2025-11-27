@@ -241,6 +241,35 @@ const handleWeanSuggest = async (chatId, months = null) => {
 };
 
 /**
+ * Parse món ăn từ format mới: 🍽️ [TÊN] | [NGUYÊN LIỆU] | [CÁCH NẤU] | [KHẨU PHẦN]
+ */
+const parseDishFromLine = (line) => {
+  // Loại bỏ emoji đầu dòng
+  let content = line.replace(/^🍽️\s*/, '').trim();
+  
+  // Thử parse theo format mới (dùng |)
+  if (content.includes('|')) {
+    const parts = content.split('|').map(p => p.trim());
+    if (parts.length >= 2) {
+      return {
+        name: parts[0],
+        ingredients: parts[1] || null,
+        recipe: parts[2] || null,
+        portion: parts[3] || null,
+        note: parts.slice(1).filter(p => p).join(' | ')
+      };
+    }
+  }
+  
+  // Fallback: parse theo format cũ (dùng -)
+  const parts = content.split(' - ');
+  return {
+    name: parts[0]?.trim() || content,
+    note: parts.slice(1).join(' - ').trim() || null
+  };
+};
+
+/**
  * Thêm món từ gợi ý AI
  */
 const handleAddFromSuggestion = async (chatId) => {
@@ -255,41 +284,30 @@ const handleAddFromSuggestion = async (chatId) => {
   }
   
   // Parse gợi ý để lấy danh sách món
-  const { suggestion } = suggestionData;
+  const { suggestion, ageMonths } = suggestionData;
   
   // Tìm các dòng bắt đầu bằng 🍽️
-  const dishes = suggestion
+  let dishes = suggestion
     .split('\n')
     .map(line => line.trim())
     .filter(line => line.startsWith('🍽️'))
-    .map(line => {
-      // Lấy phần sau emoji 🍽️
-      let dish = line.replace(/^🍽️\s*/, '').trim();
-      // Tách tên món và mô tả (nếu có dấu -)
-      const parts = dish.split(' - ');
-      return {
-        name: parts[0]?.trim() || dish,
-        note: parts[1]?.trim() || null
-      };
-    })
+    .map(parseDishFromLine)
     .filter(d => d.name && d.name.length > 0 && d.name.length < 100);
     
   if (dishes.length === 0) {
-    // Fallback: thử parse theo format cũ
+    // Fallback: thử parse theo các pattern khác
     const fallbackDishes = suggestion
       .split('\n')
       .map(line => line.trim())
       .filter(line => {
-        // Tìm dòng có vẻ là món ăn
+        // Tìm dòng có vẻ là món ăn (bắt đầu bằng số hoặc bullet)
         return line && 
-               !line.startsWith('━━') && 
-               !line.startsWith('📊') && 
-               !line.startsWith('⚠️') &&
-               !line.startsWith('💡') &&
-               !line.includes('tháng') &&
+               (line.match(/^\d+[\.\)]\s*/) || line.match(/^[•\-\*]\s*/)) &&
                !line.includes('bữa/ngày') &&
-               line.length > 3 && 
-               line.length < 80;
+               !line.includes('Số bữa') &&
+               !line.includes('Lượng/bữa') &&
+               line.length > 5 && 
+               line.length < 200;
       })
       .map(line => {
         // Loại bỏ bullet points, số thứ tự
@@ -298,16 +316,12 @@ const handleAddFromSuggestion = async (chatId) => {
           .replace(/^[•\-\*]\s*/, '')
           .replace(/^[🔥🍼🥄🥣🍲🥗🍽️]\s*/g, '')
           .trim();
-        const parts = clean.split(' - ');
-        return {
-          name: parts[0]?.trim() || clean,
-          note: parts[1]?.trim() || null
-        };
+        return parseDishFromLine('🍽️ ' + clean);
       })
-      .filter(d => d.name && d.name.length > 0 && d.name.length < 80);
+      .filter(d => d.name && d.name.length > 0 && d.name.length < 100);
       
     if (fallbackDishes.length > 0) {
-      dishes.push(...fallbackDishes.slice(0, 5));
+      dishes = fallbackDishes.slice(0, 5);
     }
   }
   
@@ -326,13 +340,24 @@ const handleAddFromSuggestion = async (chatId) => {
   
   for (const dish of dishes.slice(0, 5)) { // Giới hạn 5 món
     try {
+      // Tạo note chi tiết
+      let fullNote = '';
+      if (dish.ingredients) fullNote += `Nguyên liệu: ${dish.ingredients}`;
+      if (dish.recipe) fullNote += `${fullNote ? '\n' : ''}Cách nấu: ${dish.recipe}`;
+      if (dish.portion) fullNote += `${fullNote ? '\n' : ''}Khẩu phần: ${dish.portion}`;
+      if (!fullNote && dish.note) fullNote = dish.note;
+      if (!fullNote) fullNote = `Từ gợi ý AI (${ageMonths} tháng)`;
+      
       await FoodLog.create({
         chatId,
         dishName: dish.name,
-        note: dish.note || `Từ gợi ý AI (${suggestionData.ageMonths} tháng)`
+        note: fullNote
       });
       addedCount++;
-      addedDishes.push(dish.name);
+      addedDishes.push({
+        name: dish.name,
+        portion: dish.portion || ''
+      });
     } catch (error) {
       console.error(`Lỗi thêm món ${dish.name}:`, error);
     }
@@ -350,8 +375,9 @@ const handleAddFromSuggestion = async (chatId) => {
     ''
   ];
   
-  addedDishes.forEach((name, i) => {
-    lines.push(`   ${i + 1}. ${name}`);
+  addedDishes.forEach((dish, i) => {
+    const portionInfo = dish.portion ? ` (${dish.portion})` : '';
+    lines.push(`   ${i + 1}. ${dish.name}${portionInfo}`);
   });
   
   lines.push('');

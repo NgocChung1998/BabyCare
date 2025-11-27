@@ -122,29 +122,66 @@ Trả lời bằng tiếng Việt với emoji sinh động!`;
  * @returns {Promise<string>}
  */
 export const suggestWeanMenuWithAI = async (months) => {
-  const prompt = `Bạn là chuyên gia dinh dưỡng trẻ em Việt Nam.
-Gợi ý 5 MÓN ĂN DẶM cho bé ${months} tháng tuổi.
+  // Xác định giai đoạn ăn dặm
+  let stage = '';
+  let texture = '';
+  let portion = '';
+  
+  if (months <= 6) {
+    stage = 'mới bắt đầu ăn dặm';
+    texture = 'nghiền mịn như sữa, lỏng';
+    portion = '1-2 thìa cà phê/bữa, 1 bữa/ngày';
+  } else if (months <= 8) {
+    stage = 'đang tập ăn dặm';
+    texture = 'nghiền mịn đến hơi sệt';
+    portion = '2-4 thìa canh/bữa, 2 bữa/ngày';
+  } else if (months <= 10) {
+    stage = 'ăn dặm tiến triển';
+    texture = 'nghiền thô, có hạt nhỏ';
+    portion = '1/4 - 1/2 chén/bữa, 2-3 bữa/ngày';
+  } else if (months <= 12) {
+    stage = 'ăn dặm nâng cao';
+    texture = 'cắt nhỏ, mềm, bé có thể cầm';
+    portion = '1/2 chén/bữa, 3 bữa/ngày + snack';
+  } else {
+    stage = 'ăn cùng gia đình';
+    texture = 'cắt nhỏ vừa miệng, đa dạng';
+    portion = '3/4 - 1 chén/bữa, 3 bữa chính + 2 bữa phụ';
+  }
 
-QUAN TRỌNG: Trả lời ĐÚNG ĐỊNH DẠNG sau (mỗi món trên 1 dòng, bắt đầu bằng emoji 🍽️):
+  const prompt = `Bạn là chuyên gia dinh dưỡng trẻ em Việt Nam với 15 năm kinh nghiệm.
 
-🍽️ Cháo bí đỏ - Bí đỏ nghiền mịn, dễ tiêu
-🍽️ Cháo thịt gà - Thịt gà xay nhuyễn, bổ protein
-🍽️ Bột yến mạch chuối - Yến mạch + chuối chín, giàu chất xơ
-🍽️ Khoai lang nghiền - Khoai lang hấp, vị ngọt tự nhiên
-🍽️ Súp rau củ - Cà rốt, bí xanh, khoai tây xay nhuyễn
+BÉ ${months} THÁNG TUỔI - Giai đoạn: ${stage}
+Kết cấu phù hợp: ${texture}
+Khẩu phần: ${portion}
 
-Sau đó thêm:
+HÃY GỢI Ý 5 MÓN ĂN DẶM THỰC TẾ, DỄ NẤU CHO BÉ.
 
-📊 KHẨU PHẦN (${months} tháng):
-- Số bữa/ngày: X bữa
-- Lượng/bữa: XX-XXml
-- Kết hợp: Sữa mẹ/công thức
+⚠️ BẮT BUỘC: Mỗi món PHẢI theo format này (bắt đầu bằng 🍽️):
 
-⚠️ LƯU Ý:
-- Thực phẩm cần tránh
+🍽️ [TÊN MÓN] | [NGUYÊN LIỆU] | [CÁCH NẤU NGẮN GỌN] | [KHẨU PHẦN]
+
+VÍ DỤ ĐÚNG FORMAT:
+🍽️ Cháo bí đỏ thịt gà | 30g gạo, 20g bí đỏ, 15g thịt gà | Nấu cháo nhừ, xay nhuyễn bí và thịt, trộn đều | 50-80ml
+🍽️ Súp khoai tây cà rốt | 30g khoai tây, 20g cà rốt, 10g bơ | Hấp chín, nghiền mịn với bơ và nước dùng | 60-100ml
+
+SAU ĐÓ THÊM:
+
+📊 KHẨU PHẦN CHO BÉ ${months} THÁNG:
+- Số bữa/ngày: 
+- Lượng/bữa:
+- Kết cấu:
+- Kết hợp sữa:
+
+⚠️ LƯU Ý QUAN TRỌNG:
+- Thực phẩm cần tránh ở ${months} tháng
+- Dấu hiệu dị ứng cần theo dõi
 - Quy tắc 3 ngày thử món mới
 
-Chỉ gợi ý món PHÙ HỢP ${months} tháng tuổi. Trả lời tiếng Việt!`;
+💡 MẸO NẤU:
+- 1-2 mẹo giúp món ăn ngon hơn
+
+Chỉ gợi ý món PHÙ HỢP ${months} tháng. Nguyên liệu dễ mua ở Việt Nam!`;
   return askGemini(prompt);
 };
 

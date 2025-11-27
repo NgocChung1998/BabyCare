@@ -6,7 +6,8 @@ export const mainKeyboard = {
       [{ text: '💉 Lịch tiêm chủng' }, { text: '🧷 Thay tã' }],
       [{ text: '💩 Bé đi tè / đi ị' }, { text: '🔥 Ăn dặm' }],
       [{ text: '🎁 Gợi ý quà' }, { text: '🧴 Theo dõi da' }],
-      [{ text: '📊 Tóm tắt ngày' }, { text: '🤖 Chat AI' }]
+      [{ text: '🔗 Đồng bộ' }, { text: '🤖 Chat AI' }],
+      [{ text: '📊 Tóm tắt ngày' }]
     ],
     resize_keyboard: true,
     one_time_keyboard: false
@@ -25,6 +26,7 @@ export const MAIN_BUTTONS = [
   '🔥 Ăn dặm',
   '🎁 Gợi ý quà',
   '🧴 Theo dõi da',
+  '🔗 Đồng bộ',
   '📊 Tóm tắt ngày',
   '🤖 Chat AI'
 ];
@@ -182,6 +184,7 @@ export const buttonGuides = {
   '🔥 Ăn dặm': null,
   '🎁 Gợi ý quà': null,
   '🧴 Theo dõi da': '🏥 Phân tích hình ảnh y tế:\n\n📸 Gửi ảnh vùng da/bệnh cần kiểm tra\n🤖 AI bác sĩ chuyên khoa sẽ phân tích\n👨‍👩‍👧 Áp dụng cho cả trẻ em và người lớn\n\n⚠️ Chỉ tham khảo, không thay thế khám bác sĩ!',
+  '🔗 Đồng bộ': null,
   '🤖 Chat AI': null
 };
 
