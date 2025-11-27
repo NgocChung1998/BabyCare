@@ -1,10 +1,10 @@
 import dayjs from 'dayjs';
 import { bot, safeSendMessage } from '../index.js';
 import { SleepSession, ChatProfile, Feeding } from '../../database/models/index.js';
-import { mainKeyboard } from '../keyboard.js';
+import { mainKeyboard, buildInlineKeyboard } from '../keyboard.js';
 import { formatMinutes } from '../../utils/formatters.js';
 import { isNightSleep, getSleepGuideline } from '../../utils/helpers.js';
-import { clearState } from '../../utils/stateManager.js';
+import { clearState, setState, getState } from '../../utils/stateManager.js';
 
 // Export sleepSessionTracker để summary.js có thể sử dụng
 export const sleepSessionTracker = new Map();
@@ -79,13 +79,24 @@ const showSleepMenu = async (chatId) => {
     lines.push('');
     lines.push('━━━━━━━━━━━━━━━━━━━━');
     lines.push('');
-    lines.push('📝 Bấm lại nút để bắt đầu ghi nhận giấc ngủ.');
+    lines.push('📝 Bấm nút để bắt đầu ghi nhận giấc ngủ:');
   }
+  
+  // Keyboard với các tùy chọn
+  const sleepKeyboard = buildInlineKeyboard([
+    status.isSleeping
+      ? [{ text: '⏹️ Kết thúc ngủ', callback_data: 'sleep_stop' }]
+      : [{ text: '▶️ Bắt đầu ngủ', callback_data: 'sleep_start' }],
+    [
+      { text: '✏️ Sửa giờ ngủ', callback_data: 'sleep_edit' },
+      { text: '📊 Thống kê', callback_data: 'sleep_stats' }
+    ]
+  ]);
   
   await safeSendMessage(
     chatId,
     lines.join('\n'),
-    mainKeyboard
+    sleepKeyboard
   );
 };
 
@@ -295,6 +306,74 @@ export const registerSleepHandler = () => {
   bot.onText(/\/sleep\s*$/, async (msg) => {
     clearState(msg.chat.id);
     await handleSleepStatus(msg.chat.id);
+  });
+
+  // Callback queries
+  bot.on('callback_query', async (query) => {
+    const chatId = query.message.chat.id;
+    
+    if (query.data === 'sleep_start') {
+      await bot.answerCallbackQuery(query.id, { text: '😴 Bắt đầu ghi nhận!' });
+      await handleSleepStart(chatId);
+      return;
+    }
+    
+    if (query.data === 'sleep_stop') {
+      await bot.answerCallbackQuery(query.id, { text: '⏹️ Kết thúc giấc ngủ!' });
+      await handleSleepStop(chatId);
+      return;
+    }
+    
+    if (query.data === 'sleep_edit') {
+      await bot.answerCallbackQuery(query.id);
+      setState(chatId, { type: 'sleep_edit_time' });
+      await safeSendMessage(
+        chatId,
+        '✏️ Sửa giờ ngủ:\n\n' +
+        'Nhập giờ bắt đầu ngủ: HH:mm\n\n' +
+        'Ví dụ: 09:30'
+      );
+      return;
+    }
+    
+    if (query.data === 'sleep_stats') {
+      await bot.answerCallbackQuery(query.id);
+      await handleSleepStats(chatId);
+      return;
+    }
+  });
+  
+  // Xử lý input sửa giờ ngủ
+  bot.on('message', async (msg) => {
+    if (!msg.text) return;
+    const chatId = msg.chat.id;
+    const text = msg.text.trim();
+    
+    const state = getState(chatId);
+    if (state?.type === 'sleep_edit_time') {
+      clearState(chatId);
+      const timeMatch = text.match(/^(\d{1,2}):(\d{2})$/);
+      
+      if (!timeMatch) {
+        await safeSendMessage(chatId, '❌ Sai định dạng. Nhập: HH:mm (ví dụ: 09:30)');
+        return;
+      }
+      
+      const newTime = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
+      const now = dayjs();
+      const newDateTime = dayjs(`${now.format('YYYY-MM-DD')} ${newTime}`);
+      
+      // Bắt đầu session với thời gian đã sửa
+      sleepSessionTracker.set(chatId, newDateTime.toDate());
+      
+      await safeSendMessage(
+        chatId,
+        `✅ Đã ghi nhận bé ngủ từ ${newTime}\n\n` +
+        `📝 Khi bé dậy, bấm "😴 Nhật ký ngủ" để kết thúc.`,
+        mainKeyboard
+      );
+      return;
+    }
   });
 };
 

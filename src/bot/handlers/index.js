@@ -13,6 +13,7 @@ import { registerGiftHandler } from './gift.js';
 import { registerAiHandler } from './ai.js';
 import { registerPhotoHandler } from './photo.js';
 import { registerBirthdayHandler } from './birthday.js';
+import { registerRoutineHandler } from './routine.js';
 
 /**
  * Đăng ký tất cả handlers
@@ -33,6 +34,7 @@ export const registerAllHandlers = () => {
   registerAiHandler();
   registerPhotoHandler();
   registerBirthdayHandler();
+  registerRoutineHandler();
 
   console.info('✅ Đã đăng ký tất cả handlers');
 };

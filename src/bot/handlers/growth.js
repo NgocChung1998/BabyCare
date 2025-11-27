@@ -182,7 +182,7 @@ export const registerGrowthHandler = () => {
     const chatId = msg.chat.id;
     const text = msg.text.trim();
     
-    if (text === '👶 Cân nặng & Chiều cao') {
+    if (text === '👶 Thông tin bé') {
       clearState(chatId);
       await showBabyInfoMenu(chatId);
       return;

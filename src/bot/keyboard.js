@@ -2,9 +2,9 @@ export const mainKeyboard = {
   reply_markup: {
     keyboard: [
       [{ text: '🍼 Ăn' }, { text: '😴 Nhật ký ngủ' }],
-      [{ text: '💩 Bé đi tè / đi ị' }, { text: '👶 Cân nặng & Chiều cao' }],
+      [{ text: '📅 Lịch ăn ngủ' }, { text: '👶 Thông tin bé' }],
       [{ text: '💉 Lịch tiêm chủng' }, { text: '🧷 Thay tã' }],
-      [{ text: '🗓 Lịch chăm bé' }, { text: '🔥 Ăn dặm' }],
+      [{ text: '💩 Bé đi tè / đi ị' }, { text: '🔥 Ăn dặm' }],
       [{ text: '🎁 Gợi ý quà' }, { text: '🧴 Theo dõi da' }],
       [{ text: '📊 Tóm tắt ngày' }, { text: '🤖 Chat AI' }]
     ],
@@ -17,11 +17,11 @@ export const mainKeyboard = {
 export const MAIN_BUTTONS = [
   '🍼 Ăn',
   '😴 Nhật ký ngủ',
+  '📅 Lịch ăn ngủ',
   '💩 Bé đi tè / đi ị',
-  '👶 Cân nặng & Chiều cao',
+  '👶 Thông tin bé',
   '💉 Lịch tiêm chủng',
   '🧷 Thay tã',
-  '🗓 Lịch chăm bé',
   '🔥 Ăn dặm',
   '🎁 Gợi ý quà',
   '🧴 Theo dõi da',
@@ -54,6 +54,7 @@ export const milkAmountKeyboard = buildInlineKeyboard([
     { text: '✏️ Nhập khác', callback_data: 'milk_custom' }
   ],
   [
+    { text: '✏️ Sửa giờ ăn', callback_data: 'milk_edit_time' },
     { text: '⏰ Đặt nhắc 2.5h', callback_data: 'milk_reminder' }
   ]
 ]);
@@ -81,8 +82,29 @@ export const growthInlineKeyboard = buildInlineKeyboard([
 // ===== VACCINE BUTTONS =====
 export const vaccineInlineKeyboard = buildInlineKeyboard([
   [
-    { text: '➕ Thêm lịch tiêm', callback_data: 'vaccine_add' },
+    { text: '🔄 Tạo lịch tự động', callback_data: 'vaccine_auto' }
+  ],
+  [
+    { text: '➕ Thêm thủ công', callback_data: 'vaccine_add' },
     { text: '📋 Xem lịch tiêm', callback_data: 'vaccine_list' }
+  ],
+  [
+    { text: '✅ Đánh dấu đã tiêm', callback_data: 'vaccine_complete' }
+  ]
+]);
+
+// ===== DAILY ROUTINE BUTTONS =====
+export const routineInlineKeyboard = buildInlineKeyboard([
+  [
+    { text: '🍼 Lịch ăn hôm nay', callback_data: 'routine_feeds' },
+    { text: '😴 Lịch ngủ hôm nay', callback_data: 'routine_sleeps' }
+  ],
+  [
+    { text: '✏️ Sửa giờ ăn', callback_data: 'routine_edit_feed' },
+    { text: '✏️ Sửa giờ ngủ', callback_data: 'routine_edit_sleep' }
+  ],
+  [
+    { text: '🔄 Tạo lịch mới', callback_data: 'routine_generate' }
   ]
 ]);
 
@@ -155,12 +177,12 @@ export const aiQuickKeyboard = buildInlineKeyboard([
 export const buttonGuides = {
   '😴 Nhật ký ngủ': null,
   '🍼 Ăn': null,
+  '📅 Lịch ăn ngủ': null,
   '📊 Tóm tắt ngày': null,
   '💩 Bé đi tè / đi ị': null,
-  '👶 Cân nặng & Chiều cao': null,
+  '👶 Thông tin bé': null,
   '💉 Lịch tiêm chủng': null,
   '🧷 Thay tã': null,
-  '🗓 Lịch chăm bé': null,
   '🔥 Ăn dặm': null,
   '🎁 Gợi ý quà': null,
   '🧴 Theo dõi da': '🏥 Phân tích hình ảnh y tế:\n\n📸 Gửi ảnh vùng da/bệnh cần kiểm tra\n🤖 AI bác sĩ chuyên khoa sẽ phân tích\n👨‍👩‍👧 Áp dụng cho cả trẻ em và người lớn\n\n⚠️ Chỉ tham khảo, không thay thế khám bác sĩ!',
@@ -180,5 +202,6 @@ export default {
   giftAgeKeyboard,
   diaperInlineKeyboard,
   aiQuickKeyboard,
+  routineInlineKeyboard,
   buildInlineKeyboard
 };

@@ -1,9 +1,18 @@
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc.js';
+import timezone from 'dayjs/plugin/timezone.js';
 import { bot, safeSendMessage } from '../index.js';
-import { VaccineSchedule } from '../../database/models/index.js';
-import { vaccineInlineKeyboard, buildInlineKeyboard } from '../keyboard.js';
+import { VaccineSchedule, ChatProfile } from '../../database/models/index.js';
+import { vaccineInlineKeyboard, buildInlineKeyboard, mainKeyboard } from '../keyboard.js';
 import { parseDate } from '../../utils/validators.js';
 import { clearState, setState, getState } from '../../utils/stateManager.js';
+import { generateVaccinationSchedule } from '../../services/routineService.js';
+import { formatAge } from '../../utils/formatters.js';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+const VIETNAM_TZ = 'Asia/Ho_Chi_Minh';
 
 // Danh sách vaccine phổ biến
 const commonVaccines = [
@@ -15,29 +24,117 @@ const commonVaccines = [
  * Hiển thị menu vaccine
  */
 const showVaccineMenu = async (chatId) => {
+  const now = dayjs.tz(dayjs(), VIETNAM_TZ);
+  
+  // Lấy thông tin bé
+  const profile = await ChatProfile.findOne({ chatId });
+  let babyInfo = '';
+  if (profile?.dateOfBirth) {
+    const ageText = formatAge(profile.dateOfBirth);
+    babyInfo = `👶 Tuổi bé: ${ageText}\n\n`;
+  }
+  
+  // Đếm vaccine
+  const [totalCount, completedCount, upcomingCount] = await Promise.all([
+    VaccineSchedule.countDocuments({ chatId }),
+    VaccineSchedule.countDocuments({ chatId, completed: true }),
+    VaccineSchedule.countDocuments({ chatId, completed: false, date: { $gte: now.toDate() } })
+  ]);
+  
+  // Lấy lịch tiêm sắp tới
   const upcoming = await VaccineSchedule.find({
     chatId,
-    date: { $gte: new Date() }
-  }).sort({ date: 1 }).limit(3);
+    completed: false,
+    date: { $gte: now.subtract(7, 'day').toDate() }
+  }).sort({ date: 1 }).limit(5);
 
-  let upcomingText = '📅 Chưa có lịch tiêm sắp tới';
+  const lines = [
+    '━━━━━━━━━━━━━━━━━━━━',
+    '💉 LỊCH TIÊM CHỦNG',
+    '━━━━━━━━━━━━━━━━━━━━',
+    ''
+  ];
+  
+  if (babyInfo) lines.push(babyInfo);
+  
+  lines.push(`📊 Tổng: ${totalCount} mũi`);
+  lines.push(`✅ Đã tiêm: ${completedCount} mũi`);
+  lines.push(`⏳ Sắp tiêm: ${upcomingCount} mũi`);
+  lines.push('');
+  lines.push('━━━━━━━━━━━━━━━━━━━━');
+  lines.push('');
+  
   if (upcoming.length) {
-    upcomingText = '📅 Sắp tới:\n' + upcoming.map((item) => {
-      const date = dayjs(item.date).format('DD/MM/YYYY');
-      const daysLeft = dayjs(item.date).diff(dayjs(), 'day');
-      return `• ${date} - ${item.vaccineName} (còn ${daysLeft} ngày)`;
-    }).join('\n');
+    lines.push('📅 SẮP TỚI:');
+    lines.push('');
+    upcoming.forEach((item, i) => {
+      const date = dayjs.tz(item.date, VIETNAM_TZ).format('DD/MM/YYYY');
+      const daysLeft = dayjs.tz(item.date, VIETNAM_TZ).diff(now, 'day');
+      const required = item.required ? '🔴' : '🔵';
+      let status = '';
+      if (daysLeft === 0) status = ' ⚠️ HÔM NAY';
+      else if (daysLeft < 0) status = ` ⚠️ QUÁ ${Math.abs(daysLeft)} ngày`;
+      else if (daysLeft <= 3) status = ` 🔔 còn ${daysLeft} ngày`;
+      else status = ` còn ${daysLeft} ngày`;
+      
+      lines.push(`${i + 1}. ${required} ${date}${status}`);
+      lines.push(`   └─ ${item.vaccineName}`);
+    });
+  } else {
+    lines.push('📅 Chưa có lịch tiêm sắp tới');
+    lines.push('');
+    lines.push('💡 Bấm "Tạo lịch tự động" để tạo lịch tiêm\n   theo ngày sinh của bé');
   }
+  
+  lines.push('');
+  lines.push('━━━━━━━━━━━━━━━━━━━━');
+  lines.push('');
+  lines.push('🔴 Bắt buộc | 🔵 Khuyến cáo');
+  lines.push('');
+  lines.push('👇 Bấm nút để quản lý:');
 
+  await safeSendMessage(chatId, lines.join('\n'), vaccineInlineKeyboard);
+};
+
+/**
+ * Tạo lịch tiêm tự động từ ngày sinh
+ */
+const handleAutoGenerate = async (chatId) => {
+  const profile = await ChatProfile.findOne({ chatId });
+  
+  if (!profile?.dateOfBirth) {
+    await safeSendMessage(
+      chatId,
+      '❌ Chưa có ngày sinh của bé!\n\n' +
+      'Để tạo lịch tiêm tự động, vui lòng cập nhật ngày sinh:\n\n' +
+      '/birthday set YYYY-MM-DD\n\n' +
+      'Ví dụ: /birthday set 2024-05-10',
+      mainKeyboard
+    );
+    return;
+  }
+  
+  const count = await generateVaccinationSchedule(chatId, profile.dateOfBirth);
+  const ageText = formatAge(profile.dateOfBirth);
+  
   await safeSendMessage(
     chatId,
-    `💉 Lịch tiêm chủng:\n\n${upcomingText}\n\n👇 Bấm nút để quản lý:`,
+    '━━━━━━━━━━━━━━━━━━━━\n' +
+    '✅ TẠO LỊCH TIÊM THÀNH CÔNG\n' +
+    '━━━━━━━━━━━━━━━━━━━━\n\n' +
+    `👶 Tuổi bé: ${ageText}\n` +
+    `💉 Đã tạo: ${count} mũi tiêm\n\n` +
+    '🔔 Em sẽ nhắc bố/mẹ:\n' +
+    '   └─ Trước 7 ngày\n' +
+    '   └─ Trước 3 ngày\n' +
+    '   └─ Đúng ngày tiêm\n\n' +
+    '👇 Bấm để xem chi tiết:',
     vaccineInlineKeyboard
   );
 };
 
 /**
- * Thêm lịch tiêm
+ * Thêm lịch tiêm thủ công
  */
 const handleVaccineAdd = async (chatId, dateText, vaccineName) => {
   const date = parseDate(dateText);
@@ -48,20 +145,27 @@ const handleVaccineAdd = async (chatId, dateText, vaccineName) => {
   await VaccineSchedule.create({
     chatId,
     vaccineName: vaccineName.trim(),
-    date: date.toDate()
+    date: date.toDate(),
+    required: true,
+    autoGenerated: false
   });
   await safeSendMessage(
     chatId,
-    `💉 Đã lưu lịch tiêm ${vaccineName.trim()} vào ${date.format('DD/MM/YYYY')}.\n\n🔔 Em sẽ nhắc bố/mẹ trước 3 ngày và đúng ngày nhé!\n\n👇 Bấm nút để tiếp tục:`,
+    `✅ Đã lưu lịch tiêm!\n\n` +
+    `💉 ${vaccineName.trim()}\n` +
+    `📅 ${date.format('DD/MM/YYYY')}\n\n` +
+    `🔔 Em sẽ nhắc bố/mẹ trước 3 ngày và đúng ngày nhé!`,
     vaccineInlineKeyboard
   );
 };
 
 /**
- * Xem danh sách lịch tiêm
+ * Xem danh sách lịch tiêm chi tiết
  */
 const handleVaccineList = async (chatId) => {
+  const now = dayjs.tz(dayjs(), VIETNAM_TZ);
   const schedules = await VaccineSchedule.find({ chatId }).sort({ date: 1 });
+  
   if (!schedules.length) {
     await safeSendMessage(
       chatId,
@@ -71,33 +175,122 @@ const handleVaccineList = async (chatId) => {
     return;
   }
   
-  const now = dayjs();
-  const upcoming = schedules.filter((s) => dayjs(s.date).isAfter(now));
-  const past = schedules.filter((s) => dayjs(s.date).isBefore(now));
+  const upcoming = schedules.filter((s) => !s.completed && dayjs.tz(s.date, VIETNAM_TZ).isAfter(now.subtract(7, 'day')));
+  const completed = schedules.filter((s) => s.completed);
+  const overdue = schedules.filter((s) => !s.completed && dayjs.tz(s.date, VIETNAM_TZ).isBefore(now.subtract(7, 'day')));
   
-  let message = '💉 Lịch tiêm của bé:\n\n';
+  const lines = [
+    '━━━━━━━━━━━━━━━━━━━━',
+    '💉 CHI TIẾT LỊCH TIÊM',
+    '━━━━━━━━━━━━━━━━━━━━',
+    ''
+  ];
   
   if (upcoming.length) {
-    message += '📅 Sắp tới:\n';
-    message += upcoming.map((item) => {
-      const date = dayjs(item.date).format('DD/MM/YYYY');
-      const daysLeft = dayjs(item.date).diff(now, 'day');
-      return `• ${date} - ${item.vaccineName} (còn ${daysLeft} ngày)`;
-    }).join('\n');
-    message += '\n\n';
+    lines.push('📅 SẮP TIÊM:');
+    lines.push('');
+    upcoming.slice(0, 10).forEach((item, i) => {
+      const date = dayjs.tz(item.date, VIETNAM_TZ).format('DD/MM/YYYY');
+      const daysLeft = dayjs.tz(item.date, VIETNAM_TZ).diff(now, 'day');
+      const required = item.required ? '🔴' : '🔵';
+      lines.push(`${i + 1}. ${required} ${date} (${daysLeft >= 0 ? `còn ${daysLeft}` : `quá ${Math.abs(daysLeft)}`} ngày)`);
+      lines.push(`   └─ ${item.vaccineName}`);
+    });
+    if (upcoming.length > 10) {
+      lines.push(`   ... và ${upcoming.length - 10} mũi khác`);
+    }
+    lines.push('');
   }
   
-  if (past.length) {
-    message += '✅ Đã tiêm:\n';
-    message += past.slice(-5).map((item) => {
-      const date = dayjs(item.date).format('DD/MM/YYYY');
-      return `• ${date} - ${item.vaccineName}`;
-    }).join('\n');
+  if (overdue.length) {
+    lines.push('⚠️ QUÁ HẠN:');
+    lines.push('');
+    overdue.slice(0, 5).forEach((item, i) => {
+      const date = dayjs.tz(item.date, VIETNAM_TZ).format('DD/MM/YYYY');
+      lines.push(`${i + 1}. ${date} - ${item.vaccineName}`);
+    });
+    lines.push('');
   }
   
-  message += '\n\n👇 Bấm nút để quản lý:';
+  if (completed.length) {
+    lines.push('✅ ĐÃ TIÊM:');
+    lines.push('');
+    completed.slice(-5).forEach((item, i) => {
+      const date = dayjs.tz(item.completedDate || item.date, VIETNAM_TZ).format('DD/MM/YYYY');
+      lines.push(`${i + 1}. ${date} - ${item.vaccineName}`);
+    });
+    if (completed.length > 5) {
+      lines.push(`   ... và ${completed.length - 5} mũi khác`);
+    }
+  }
   
-  await safeSendMessage(chatId, message, vaccineInlineKeyboard);
+  lines.push('');
+  lines.push('━━━━━━━━━━━━━━━━━━━━');
+  lines.push('');
+  lines.push('👇 Bấm nút để quản lý:');
+  
+  await safeSendMessage(chatId, lines.join('\n'), vaccineInlineKeyboard);
+};
+
+/**
+ * Hiển thị danh sách vaccine để đánh dấu đã tiêm
+ */
+const showVaccinesToComplete = async (chatId) => {
+  const now = dayjs.tz(dayjs(), VIETNAM_TZ);
+  
+  const upcoming = await VaccineSchedule.find({
+    chatId,
+    completed: false,
+    date: { $lte: now.add(7, 'day').toDate() }
+  }).sort({ date: 1 }).limit(10);
+  
+  if (!upcoming.length) {
+    await safeSendMessage(
+      chatId,
+      '💉 Không có mũi tiêm nào cần đánh dấu.\n\n' +
+      '(Chỉ hiển thị các mũi trong 7 ngày tới)',
+      vaccineInlineKeyboard
+    );
+    return;
+  }
+  
+  const buttons = upcoming.map((item, i) => [{
+    text: `${dayjs.tz(item.date, VIETNAM_TZ).format('DD/MM')} - ${item.vaccineName}`,
+    callback_data: `vaccine_done_${item._id}`
+  }]);
+  
+  buttons.push([{ text: '🔙 Quay lại', callback_data: 'vaccine_back' }]);
+  
+  await safeSendMessage(
+    chatId,
+    '✅ Chọn mũi tiêm đã hoàn thành:',
+    buildInlineKeyboard(buttons)
+  );
+};
+
+/**
+ * Đánh dấu vaccine đã tiêm
+ */
+const markVaccineComplete = async (chatId, vaccineId) => {
+  const vaccine = await VaccineSchedule.findByIdAndUpdate(
+    vaccineId,
+    {
+      completed: true,
+      completedDate: new Date()
+    },
+    { new: true }
+  );
+  
+  if (vaccine) {
+    await safeSendMessage(
+      chatId,
+      `✅ Đã đánh dấu hoàn thành!\n\n` +
+      `💉 ${vaccine.vaccineName}\n` +
+      `📅 Tiêm ngày: ${dayjs.tz(new Date(), VIETNAM_TZ).format('DD/MM/YYYY')}\n\n` +
+      `Bé giỏi lắm! 👶💪`,
+      vaccineInlineKeyboard
+    );
+  }
 };
 
 /**
@@ -163,6 +356,12 @@ export const registerVaccineHandler = () => {
   bot.on('callback_query', async (query) => {
     const chatId = query.message.chat.id;
     
+    if (query.data === 'vaccine_auto') {
+      await bot.answerCallbackQuery(query.id, { text: 'Đang tạo lịch tiêm...' });
+      await handleAutoGenerate(chatId);
+      return;
+    }
+    
     if (query.data === 'vaccine_add') {
       await bot.answerCallbackQuery(query.id);
       setState(chatId, { type: 'vaccine_date' });
@@ -176,6 +375,25 @@ export const registerVaccineHandler = () => {
     if (query.data === 'vaccine_list') {
       await bot.answerCallbackQuery(query.id);
       await handleVaccineList(chatId);
+      return;
+    }
+    
+    if (query.data === 'vaccine_complete') {
+      await bot.answerCallbackQuery(query.id);
+      await showVaccinesToComplete(chatId);
+      return;
+    }
+    
+    if (query.data === 'vaccine_back') {
+      await bot.answerCallbackQuery(query.id);
+      await showVaccineMenu(chatId);
+      return;
+    }
+    
+    if (query.data.startsWith('vaccine_done_')) {
+      const vaccineId = query.data.replace('vaccine_done_', '');
+      await bot.answerCallbackQuery(query.id, { text: 'Đang cập nhật...' });
+      await markVaccineComplete(chatId, vaccineId);
       return;
     }
     
@@ -212,6 +430,11 @@ export const registerVaccineHandler = () => {
   bot.onText(/\/vaccine\s+list/, async (msg) => {
     clearState(msg.chat.id);
     await handleVaccineList(msg.chat.id);
+  });
+  
+  bot.onText(/\/vaccine\s+auto/, async (msg) => {
+    clearState(msg.chat.id);
+    await handleAutoGenerate(msg.chat.id);
   });
   
   // /vaccine không có tham số -> hiển thị menu

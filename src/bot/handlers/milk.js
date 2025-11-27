@@ -205,6 +205,40 @@ export const registerMilkHandler = () => {
       await handleMilkLog(chatId, text);
       return;
     }
+    
+    // Xử lý sửa giờ ăn
+    if (state?.type === 'milk_edit_time') {
+      clearState(chatId);
+      // Parse: HH:mm SỐml
+      const parts = text.split(/\s+/);
+      const timeMatch = parts[0]?.match(/^(\d{1,2}):(\d{2})$/);
+      
+      if (!timeMatch) {
+        await safeSendMessage(chatId, '❌ Sai định dạng. Nhập: HH:mm SỐml (ví dụ: 09:30 150)');
+        return;
+      }
+      
+      const newTime = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
+      const amount = parts[1] ? parseInt(parts[1], 10) : 150;
+      
+      // Tạo feeding record với thời gian đã sửa
+      const now = dayjs();
+      const newDateTime = dayjs(`${now.format('YYYY-MM-DD')} ${newTime}`);
+      
+      await Feeding.create({
+        chatId,
+        amountMl: amount,
+        recordedAt: newDateTime.toDate(),
+        note: `Sửa thủ công`
+      });
+      
+      await safeSendMessage(
+        chatId,
+        `✅ Đã ghi nhận bữa ăn!\n\n⏰ Thời gian: ${newTime}\n🍼 Lượng sữa: ${amount}ml`,
+        milkAmountKeyboard
+      );
+      return;
+    }
   });
 
   // Callback queries
@@ -225,6 +259,21 @@ export const registerMilkHandler = () => {
         await bot.answerCallbackQuery(query.id);
         setState(chatId, { type: 'milk_custom' });
         await safeSendMessage(chatId, '🍼 Nhập lượng sữa (ml):\n\nVí dụ: 180');
+        return;
+      }
+      
+      if (amount === 'edit_time') {
+        await bot.answerCallbackQuery(query.id);
+        setState(chatId, { type: 'milk_edit_time' });
+        await safeSendMessage(
+          chatId,
+          '✏️ Sửa giờ ăn:\n\n' +
+          'Nhập theo định dạng: HH:mm SỐml\n\n' +
+          'Ví dụ:\n' +
+          '• 09:30 150\n' +
+          '• 14:00 180\n' +
+          '• 07:00 120'
+        );
         return;
       }
       

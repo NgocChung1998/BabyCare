@@ -9,4 +9,5 @@ export { SupplementLog } from './SupplementLog.js';
 export { DailySchedule } from './DailySchedule.js';
 export { FoodLog } from './FoodLog.js';
 export { PhotoAnalysisLog } from './PhotoAnalysisLog.js';
+export { DailyRoutine } from './DailyRoutine.js';
 

@@ -4,9 +4,11 @@ import utc from 'dayjs/plugin/utc.js';
 import timezone from 'dayjs/plugin/timezone.js';
 import { CONSTANTS } from '../config/index.js';
 import { safeSendMessage } from '../bot/index.js';
-import { ChatProfile, VaccineSchedule, DailySchedule } from '../database/models/index.js';
+import { ChatProfile, VaccineSchedule, DailySchedule, DailyRoutine } from '../database/models/index.js';
 import { calculateSleepStats } from '../bot/handlers/sleep.js';
 import { formatScheduleItems, formatMinutes } from '../utils/formatters.js';
+import { checkMissedActivities, markAsReminded, generateDailyRoutine } from '../services/routineService.js';
+import { buildInlineKeyboard } from '../bot/keyboard.js';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -24,15 +26,27 @@ const createVaccineReminderJob = () => {
     async () => {
       const today = dayjs.tz(dayjs(), VIETNAM_TZ).startOf('day');
       const schedules = await VaccineSchedule.find({
+        completed: false,
         date: {
           $gte: today.subtract(1, 'day').toDate(),
-          $lte: today.add(3, 'day').endOf('day').toDate()
+          $lte: today.add(7, 'day').endOf('day').toDate()
         }
       });
       await Promise.all(
         schedules.map(async (item) => {
           const targetDay = dayjs.tz(item.date, VIETNAM_TZ).startOf('day');
           const diff = targetDay.diff(today, 'day');
+          
+          // Nhắc trước 7 ngày
+          if (diff === 7 && !item.reminders.pre7d) {
+            await safeSendMessage(
+              item.chatId,
+              `💉 Còn 1 tuần nữa tới mũi ${item.vaccineName} (${targetDay.format('DD/MM')}). Chuẩn bị cho bé nhé!`
+            );
+            item.reminders.pre7d = true;
+          }
+          
+          // Nhắc trước 3 ngày
           if (diff === 3 && !item.reminders.pre3d) {
             await safeSendMessage(
               item.chatId,
@@ -40,15 +54,18 @@ const createVaccineReminderJob = () => {
             );
             item.reminders.pre3d = true;
           }
+          
+          // Nhắc đúng ngày
           if (diff === 0 && !item.reminders.dayOf) {
             await safeSendMessage(
               item.chatId,
-              `💉 Hôm nay bé có lịch tiêm ${item.vaccineName}. Nhớ mang sổ tiêm và đồ chơi bé thích nhé!`,
+              `💉 HÔM NAY bé có lịch tiêm ${item.vaccineName}!\n\n📋 Nhớ mang:\n• Sổ tiêm chủng\n• Đồ chơi bé thích\n• Bỉm/tã dự phòng\n\nChúc bé tiêm khỏe mạnh! 💪`,
               {},
               'high'
             );
             item.reminders.dayOf = true;
           }
+          
           if (item.isModified('reminders')) {
             await item.save();
           }
@@ -85,25 +102,35 @@ const createVitaminReminderJob = () => {
 };
 
 /**
- * Job gửi lịch chăm bé (6h sáng hàng ngày theo giờ Việt Nam)
+ * Job gửi lịch chăm bé và tạo lịch ăn ngủ (6h sáng hàng ngày)
  */
 const createScheduleMorningJob = () => {
   return cron.schedule(
     '0 0 6 * * *',
     async () => {
-      const schedules = await DailySchedule.find({});
+      const chats = await ChatProfile.find({});
+      
       await Promise.all(
-        schedules.map(async (schedule) => {
-          const content = formatScheduleItems(schedule.items);
-          await safeSendMessage(
-            schedule.chatId,
-            `🗓 Lịch chăm bé ngày hôm nay đã sẵn sàng!\n${content}`,
-            {},
-            'normal'
-          );
+        chats.map(async (chat) => {
+          // Tạo lịch ăn ngủ hàng ngày
+          if (chat.dateOfBirth) {
+            await generateDailyRoutine(chat.chatId);
+          }
+          
+          // Gửi lịch chăm bé
+          const schedule = await DailySchedule.findOne({ chatId: chat.chatId });
+          if (schedule) {
+            const content = formatScheduleItems(schedule.items);
+            await safeSendMessage(
+              chat.chatId,
+              `🗓 Lịch chăm bé ngày hôm nay đã sẵn sàng!\n${content}`,
+              {},
+              'normal'
+            );
+          }
         })
       );
-      console.info('[Cron] Đã gửi lịch sáng');
+      console.info('[Cron] Đã gửi lịch sáng và tạo routine');
     },
     { timezone: CONSTANTS.DEFAULT_TIMEZONE, scheduled: false }
   );
@@ -136,6 +163,74 @@ const createWeeklySleepJob = () => {
 };
 
 /**
+ * Job kiểm tra bữa ăn/giấc ngủ bị lỡ (chạy mỗi giờ từ 7h-21h)
+ */
+const createMissedActivityJob = () => {
+  return cron.schedule(
+    '0 30 7-21 * * *', // Mỗi giờ rưỡi (7:30, 8:30, ..., 21:30)
+    async () => {
+      const chats = await ChatProfile.find({ dateOfBirth: { $exists: true } });
+      
+      await Promise.all(
+        chats.map(async (chat) => {
+          try {
+            const { missedFeeds, missedSleeps } = await checkMissedActivities(chat.chatId);
+            
+            // Nhắc bữa ăn bị lỡ
+            if (missedFeeds.length > 0) {
+              const feed = missedFeeds[0]; // Chỉ nhắc bữa đầu tiên
+              const confirmKeyboard = buildInlineKeyboard([
+                [
+                  { text: '✅ Đã cho ăn rồi', callback_data: 'missed_feed_yes' },
+                  { text: '❌ Chưa', callback_data: 'missed_feed_no' }
+                ]
+              ]);
+              
+              await safeSendMessage(
+                chat.chatId,
+                `🍼 Ơ! Bố/mẹ quên cho bé ăn rồi à?\n\n` +
+                `📅 Lịch: ${feed.time}\n` +
+                `⏰ Đã quá ${feed.minutesLate} phút\n\n` +
+                `Bé đã ăn chưa ạ?`,
+                confirmKeyboard
+              );
+              
+              await markAsReminded(chat.chatId, 'feeding', feed.time);
+            }
+            
+            // Nhắc giấc ngủ bị lỡ
+            if (missedSleeps.length > 0) {
+              const sleep = missedSleeps[0];
+              const confirmKeyboard = buildInlineKeyboard([
+                [
+                  { text: '✅ Bé đã ngủ', callback_data: 'missed_sleep_yes' },
+                  { text: '❌ Chưa ngủ', callback_data: 'missed_sleep_no' }
+                ]
+              ]);
+              
+              await safeSendMessage(
+                chat.chatId,
+                `😴 Ơ! Bố/mẹ quên cho bé ngủ rồi à?\n\n` +
+                `📅 Lịch: ${sleep.time} - ${sleep.name}\n` +
+                `⏰ Đã quá ${sleep.minutesLate} phút\n\n` +
+                `Bé đã ngủ chưa ạ?`,
+                confirmKeyboard
+              );
+              
+              await markAsReminded(chat.chatId, 'sleep', sleep.name);
+            }
+          } catch (error) {
+            console.error(`[Cron] Lỗi kiểm tra missed activity cho ${chat.chatId}:`, error);
+          }
+        })
+      );
+      console.info('[Cron] Đã kiểm tra missed activities');
+    },
+    { timezone: CONSTANTS.DEFAULT_TIMEZONE, scheduled: false }
+  );
+};
+
+/**
  * Khởi động tất cả cron jobs
  */
 export const startAllJobs = () => {
@@ -143,13 +238,15 @@ export const startAllJobs = () => {
   const vitaminJob = createVitaminReminderJob();
   const scheduleJob = createScheduleMorningJob();
   const sleepJob = createWeeklySleepJob();
+  const missedJob = createMissedActivityJob();
 
   vaccineJob.start();
   vitaminJob.start();
   scheduleJob.start();
   sleepJob.start();
+  missedJob.start();
 
-  jobs.push(vaccineJob, vitaminJob, scheduleJob, sleepJob);
+  jobs.push(vaccineJob, vitaminJob, scheduleJob, sleepJob, missedJob);
   console.info('✅ Đã khởi động tất cả cron jobs');
 };
 
