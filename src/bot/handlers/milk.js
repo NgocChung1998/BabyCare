@@ -6,6 +6,7 @@ import { clearState, setState, getState } from '../../utils/stateManager.js';
 import { setMilkReminder, clearMilkReminder } from '../../services/reminderService.js';
 import { sleepSessionTracker } from './sleep.js';
 import { getGroupChatIds, notifySyncMembers } from './sync.js';
+import { buildFeedConfirmationMessage } from '../helpers/feedMessages.js';
 
 /**
  * Parse thời gian từ input đơn giản
@@ -207,26 +208,8 @@ const handleMilkLog = async (chatId, amountMl, timeStr = null) => {
     await sendReminderToGroup(chatId, message);
   });
   
-  const nextFeedTime = dayjs(recordedAt).add(2.5, 'hour').format('HH:mm');
-  
-  const lines = [
-    '━━━━━━━━━━━━━━━━━━━━',
-    '✅ ĐÃ GHI NHẬN',
-    '━━━━━━━━━━━━━━━━━━━━',
-    '',
-    `🍼 ${amountMl}ml lúc ${timeDisplay}`,
-    '',
-    `⏰ Nhắc cữ tiếp: ~${nextFeedTime}`,
-    '',
-    '📢 Lịch nhắc:',
-    '   • Trước 30p, 10p',
-    '   • Đúng giờ',
-    '   • Quá 15p, 30p',
-    '',
-    '━━━━━━━━━━━━━━━━━━━━'
-  ];
-  
-  await safeSendMessage(chatId, lines.join('\n'), mainKeyboard);
+  const confirmation = buildFeedConfirmationMessage({ amountMl, recordedAt });
+  await safeSendMessage(chatId, confirmation, mainKeyboard);
   
   // Thông báo cho các thành viên khác trong nhóm
   await notifySyncMembers(chatId, `Đã cho bé ăn ${amountMl}ml lúc ${timeDisplay}`);

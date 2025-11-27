@@ -11,6 +11,7 @@ import { formatAge } from '../../utils/formatters.js';
 import { sleepSessionTracker } from './sleep.js';
 import { CONSTANTS } from '../../config/index.js';
 import { getGroupChatIds, getPrimaryChatId, notifySyncMembers } from './sync.js';
+import { buildFeedConfirmationMessage } from '../helpers/feedMessages.js';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -110,6 +111,17 @@ const scheduleMilkReminderAfterFeed = async (chatId) => {
       console.error('[Routine] Error sending milk reminder:', err);
     });
   });
+};
+
+const sendFeedConfirmation = async ({
+  chatId,
+  amountMl,
+  recordedAt,
+  prefix = '✅ ĐÃ GHI NHẬN',
+  keyboard = routineInlineKeyboard
+}) => {
+  const message = buildFeedConfirmationMessage({ amountMl, recordedAt, prefix });
+  await safeSendMessage(chatId, message, keyboard);
 };
 
 /**
@@ -789,11 +801,12 @@ export const registerRoutineHandler = () => {
         const newRecordedAt = dayjs.tz(`${now.format('YYYY-MM-DD')} ${timeStr}`, VIETNAM_TZ).toDate();
         await Feeding.findByIdAndUpdate(state.feedId, { recordedAt: newRecordedAt });
         
-        await safeSendMessage(
+        await sendFeedConfirmation({
           chatId,
-          `✅ Đã sửa!\n\n🍼 ${state.oldAmount}ml lúc ${timeStr}`,
-          routineInlineKeyboard
-        );
+          amountMl: state.oldAmount,
+          recordedAt: newRecordedAt,
+          prefix: '✅ ĐÃ SỬA CỮ ĂN'
+        });
         await showFeedingSchedule(chatId);
         await scheduleMilkReminderAfterFeed(chatId);
         return;
@@ -845,22 +858,23 @@ export const registerRoutineHandler = () => {
         const now = dayjs.tz(dayjs(), VIETNAM_TZ);
         const recordedAt = dayjs.tz(`${now.format('YYYY-MM-DD')} ${timeStr}`, VIETNAM_TZ).toDate();
         await Feeding.findByIdAndUpdate(feedId, { recordedAt, amountMl: amount });
-        await safeSendMessage(
+        await sendFeedConfirmation({
           chatId,
-          `✅ Đã sửa!\n\n🍼 ${amount}ml lúc ${timeStr}`,
-          routineInlineKeyboard
-        );
+          amountMl: amount,
+          recordedAt,
+          prefix: '✅ ĐÃ SỬA CỮ ĂN'
+        });
         await notifySyncMembers(chatId, `✏️ Đã sửa cữ ăn: ${amount}ml lúc ${timeStr}`);
       } else {
         // Thêm mới
         const now = dayjs.tz(dayjs(), VIETNAM_TZ);
         const recordedAt = dayjs.tz(`${now.format('YYYY-MM-DD')} ${timeStr}`, VIETNAM_TZ).toDate();
         await Feeding.create({ chatId: primaryChatId, amountMl: amount, recordedAt });
-        await safeSendMessage(
+        await sendFeedConfirmation({
           chatId,
-          `✅ Đã ghi nhận!\n\n🍼 ${amount}ml lúc ${timeStr}`,
-          routineInlineKeyboard
-        );
+          amountMl: amount,
+          recordedAt
+        });
         await notifySyncMembers(chatId, `🍼 Ghi nhận cữ ăn: ${amount}ml lúc ${timeStr}`);
       }
       // Hiển thị lại lịch ăn
@@ -1010,11 +1024,12 @@ export const registerRoutineHandler = () => {
       const recordedAt = dayjs.tz(`${now.format('YYYY-MM-DD')} ${timeStr}`, VIETNAM_TZ).toDate();
       await Feeding.create({ chatId: primaryChatId, amountMl: amount, recordedAt });
       
-      await safeSendMessage(
+      await sendFeedConfirmation({
         chatId,
-        `✅ Đã ghi nhận!\n\n🍼 ${amount}ml lúc ${timeStr}`,
-        mainKeyboard
-      );
+        amountMl: amount,
+        recordedAt,
+        keyboard: mainKeyboard
+      });
       await notifySyncMembers(chatId, `🍼 Ghi nhận cữ ăn: ${amount}ml lúc ${timeStr}`);
       await scheduleMilkReminderAfterFeed(chatId);
       return;
@@ -1453,11 +1468,20 @@ export const registerRoutineHandler = () => {
       
       if (feedId) {
         await Feeding.findByIdAndUpdate(feedId, { recordedAt, amountMl: amount });
-        await safeSendMessage(chatId, `✅ Đã sửa!\n\n🍼 ${amount}ml lúc ${timeStr}`);
+        await sendFeedConfirmation({
+          chatId,
+          amountMl: amount,
+          recordedAt,
+          prefix: '✅ ĐÃ SỬA CỮ ĂN'
+        });
         await notifySyncMembers(chatId, `✏️ Đã sửa cữ ăn: ${amount}ml lúc ${timeStr}`);
       } else {
         await Feeding.create({ chatId: primaryChatId, amountMl: amount, recordedAt });
-        await safeSendMessage(chatId, `✅ Đã ghi nhận!\n\n🍼 ${amount}ml lúc ${timeStr}`);
+        await sendFeedConfirmation({
+          chatId,
+          amountMl: amount,
+          recordedAt
+        });
         await notifySyncMembers(chatId, `🍼 Ghi nhận cữ ăn: ${amount}ml lúc ${timeStr}`);
       }
       
@@ -1655,11 +1679,12 @@ export const registerRoutineHandler = () => {
       const recordedAt = dayjs.tz(`${now.format('YYYY-MM-DD')} ${timeStr}`, VIETNAM_TZ).toDate();
       await Feeding.create({ chatId: primaryChatId, amountMl: amount, recordedAt });
       
-      await safeSendMessage(
+      await sendFeedConfirmation({
         chatId,
-        `✅ Đã ghi nhận!\n\n🍼 ${amount}ml lúc ${timeStr}\n\n⏰ Em sẽ nhắc cữ tiếp theo sau ${CONSTANTS.MILK_INTERVAL_HOURS || 3}h nữa!`,
-        mainKeyboard
-      );
+        amountMl: amount,
+        recordedAt,
+        keyboard: mainKeyboard
+      });
       await notifySyncMembers(chatId, `🍼 Ghi nhận cữ ăn: ${amount}ml lúc ${timeStr}`);
       await scheduleMilkReminderAfterFeed(chatId);
       return;
