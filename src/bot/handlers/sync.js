@@ -375,16 +375,19 @@ export const registerSyncHandler = () => {
     
     if (query.data === 'sync_create') {
       await bot.answerCallbackQuery(query.id);
+      
+      // Set state cho trường hợp nhập tên thủ công
       setState(chatId, { type: 'sync_input_name', action: 'create' });
       
+      // Đưa action vào callback data để không bị mất state khi click button
       const keyboard = buildInlineKeyboard([
         [
-          { text: '👨 Bố', callback_data: 'sync_role_bo' },
-          { text: '👩 Mẹ', callback_data: 'sync_role_me' }
+          { text: '👨 Bố', callback_data: 'sync_create_bo' },
+          { text: '👩 Mẹ', callback_data: 'sync_create_me' }
         ],
         [
-          { text: '👴 Ông', callback_data: 'sync_role_ong' },
-          { text: '👵 Bà', callback_data: 'sync_role_ba' }
+          { text: '👴 Ông', callback_data: 'sync_create_ong' },
+          { text: '👵 Bà', callback_data: 'sync_create_ba' }
         ],
         [
           { text: '❌ Hủy', callback_data: 'sync_menu' }
@@ -401,16 +404,19 @@ export const registerSyncHandler = () => {
     
     if (query.data === 'sync_join') {
       await bot.answerCallbackQuery(query.id);
+      
+      // Set state cho trường hợp nhập tên thủ công
       setState(chatId, { type: 'sync_input_name', action: 'join' });
       
+      // Đưa action vào callback data để không bị mất state khi click button
       const keyboard = buildInlineKeyboard([
         [
-          { text: '👨 Bố', callback_data: 'sync_role_bo' },
-          { text: '👩 Mẹ', callback_data: 'sync_role_me' }
+          { text: '👨 Bố', callback_data: 'sync_join_bo' },
+          { text: '👩 Mẹ', callback_data: 'sync_join_me' }
         ],
         [
-          { text: '👴 Ông', callback_data: 'sync_role_ong' },
-          { text: '👵 Bà', callback_data: 'sync_role_ba' }
+          { text: '👴 Ông', callback_data: 'sync_join_ong' },
+          { text: '👵 Bà', callback_data: 'sync_join_ba' }
         ],
         [
           { text: '❌ Hủy', callback_data: 'sync_menu' }
@@ -425,36 +431,30 @@ export const registerSyncHandler = () => {
       return;
     }
     
-    // Chọn vai trò nhanh (dùng mã ASCII thay vì tiếng Việt)
-    if (query.data.startsWith('sync_role_')) {
-      const roleMap = {
-        'bo': 'Bố',
-        'me': 'Mẹ',
-        'ong': 'Ông',
-        'ba': 'Bà'
-      };
-      const roleKey = query.data.replace('sync_role_', '');
+    // Chọn vai trò để TẠO nhóm (action trong callback data)
+    if (query.data.startsWith('sync_create_')) {
+      const roleMap = { 'bo': 'Bố', 'me': 'Mẹ', 'ong': 'Ông', 'ba': 'Bà' };
+      const roleKey = query.data.replace('sync_create_', '');
       const displayName = roleMap[roleKey] || roleKey;
       
       await bot.answerCallbackQuery(query.id, { text: `Đã chọn: ${displayName}` });
+      console.log(`[Sync] Creating group for ${displayName}, chatId: ${chatId}`);
       
-      // Lấy state TRƯỚC khi clear
-      const state = getState(chatId);
-      const action = state?.action;
-      clearState(chatId);
+      await handleCreateGroup(chatId, displayName);
+      return;
+    }
+    
+    // Chọn vai trò để THAM GIA nhóm (action trong callback data)
+    if (query.data.startsWith('sync_join_')) {
+      const roleMap = { 'bo': 'Bố', 'me': 'Mẹ', 'ong': 'Ông', 'ba': 'Bà' };
+      const roleKey = query.data.replace('sync_join_', '');
+      const displayName = roleMap[roleKey] || roleKey;
       
-      console.log(`[Sync] Role selected: ${displayName}, action: ${action}, chatId: ${chatId}`);
+      await bot.answerCallbackQuery(query.id, { text: `Đã chọn: ${displayName}` });
+      console.log(`[Sync] Joining group as ${displayName}, chatId: ${chatId}`);
       
-      if (action === 'create') {
-        await handleCreateGroup(chatId, displayName);
-      } else if (action === 'join') {
-        setState(chatId, { type: 'sync_input_code', displayName });
-        await safeSendMessage(chatId, '🔑 Nhập mã nhóm (6 ký tự):');
-      } else {
-        // Nếu không có action, quay lại menu
-        console.log(`[Sync] No action found, showing menu`);
-        await showSyncMenu(chatId);
-      }
+      setState(chatId, { type: 'sync_input_code', displayName });
+      await safeSendMessage(chatId, '🔑 Nhập mã nhóm (6 ký tự):');
       return;
     }
     
