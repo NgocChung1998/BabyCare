@@ -5,11 +5,12 @@ import { bot, safeSendMessage } from '../index.js';
 import { ChatProfile, Feeding, SleepSession, DailyRoutine } from '../../database/models/index.js';
 import { routineInlineKeyboard, buildInlineKeyboard, mainKeyboard } from '../keyboard.js';
 import { generateDailyRoutine, getScheduleByAge } from '../../services/routineService.js';
+import { setMilkReminder } from '../../services/reminderService.js';
 import { clearState, setState, getState } from '../../utils/stateManager.js';
 import { formatAge } from '../../utils/formatters.js';
 import { sleepSessionTracker } from './sleep.js';
 import { CONSTANTS } from '../../config/index.js';
-import { getGroupChatIds, notifySyncMembers } from './sync.js';
+import { getGroupChatIds, getPrimaryChatId, notifySyncMembers } from './sync.js';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -84,6 +85,31 @@ const parseSimpleTime = (input) => {
   }
   
   return null;
+};
+
+/**
+ * Gửi thông báo nhắc cữ ăn cho tất cả thành viên trong nhóm
+ */
+const sendMilkReminderToGroup = async (chatId, message) => {
+  const groupChatIds = await getGroupChatIds(chatId);
+  for (const memberId of groupChatIds) {
+    await safeSendMessage(memberId, message, mainKeyboard);
+  }
+};
+
+/**
+ * Đặt lại toàn bộ nhắc nhở pha sữa dựa trên cữ ăn gần nhất
+ */
+const scheduleMilkReminderAfterFeed = async (chatId) => {
+  const primaryChatId = await getPrimaryChatId(chatId);
+  const lastFeed = await Feeding.findOne({ chatId: primaryChatId }).sort({ recordedAt: -1 });
+  if (!lastFeed) return;
+
+  setMilkReminder(primaryChatId, lastFeed.recordedAt, (message) => {
+    sendMilkReminderToGroup(chatId, message).catch((err) => {
+      console.error('[Routine] Error sending milk reminder:', err);
+    });
+  });
 };
 
 /**
@@ -769,6 +795,7 @@ export const registerRoutineHandler = () => {
           routineInlineKeyboard
         );
         await showFeedingSchedule(chatId);
+        await scheduleMilkReminderAfterFeed(chatId);
         return;
       }
       
@@ -838,6 +865,7 @@ export const registerRoutineHandler = () => {
       }
       // Hiển thị lại lịch ăn
       await showFeedingSchedule(chatId);
+      await scheduleMilkReminderAfterFeed(chatId);
       return;
     }
     
@@ -988,6 +1016,7 @@ export const registerRoutineHandler = () => {
         mainKeyboard
       );
       await notifySyncMembers(chatId, `🍼 Ghi nhận cữ ăn: ${amount}ml lúc ${timeStr}`);
+      await scheduleMilkReminderAfterFeed(chatId);
       return;
     }
     
@@ -1138,6 +1167,7 @@ export const registerRoutineHandler = () => {
       
       await safeSendMessage(chatId, `✅ Đã sửa giờ ăn thành ${newTimeStr}!`);
       await showFeedingSchedule(chatId);
+      await scheduleMilkReminderAfterFeed(chatId);
       return;
     }
     
@@ -1163,6 +1193,7 @@ export const registerRoutineHandler = () => {
       await Feeding.findByIdAndDelete(feedId);
       await safeSendMessage(chatId, '✅ Đã xóa cữ ăn!');
       await showFeedingSchedule(chatId);
+      await scheduleMilkReminderAfterFeed(chatId);
       return;
     }
     
@@ -1431,6 +1462,7 @@ export const registerRoutineHandler = () => {
       }
       
       await showFeedingSchedule(chatId);
+      await scheduleMilkReminderAfterFeed(chatId);
       return;
     }
     
@@ -1629,6 +1661,7 @@ export const registerRoutineHandler = () => {
         mainKeyboard
       );
       await notifySyncMembers(chatId, `🍼 Ghi nhận cữ ăn: ${amount}ml lúc ${timeStr}`);
+      await scheduleMilkReminderAfterFeed(chatId);
       return;
     }
     

@@ -16,21 +16,38 @@ const MILK_REMINDER_SCHEDULE = [
 /**
  * Đặt nhiều timer nhắc sữa
  * @param {number} chatId - Chat ID
+ * @param {Date|string|number} lastFeedAt - Thời điểm cữ ăn cuối cùng
  * @param {Function} callback - Callback nhận message để gửi
  */
-export const setMilkReminder = (chatId, callback) => {
+export const setMilkReminder = (chatId, lastFeedAt, callback) => {
   // Xóa timers cũ nếu có
   clearMilkReminder(chatId);
   
   const timers = [];
+  const baseTime = lastFeedAt ? new Date(lastFeedAt) : new Date();
+  const baseMs = baseTime.getTime();
+  const nowMs = Date.now();
+  let scheduled = false;
   
   for (const reminder of MILK_REMINDER_SCHEDULE) {
-    const timeoutMs = reminder.minutesAfter * 60 * 1000;
+    const targetMs = baseMs + reminder.minutesAfter * 60 * 1000;
+    const timeoutMs = targetMs - nowMs;
+    if (timeoutMs <= 0) {
+      continue;
+    }
     const timeoutId = setTimeout(() => {
       if (typeof callback === 'function') {
         callback(reminder.message);
       }
     }, timeoutMs);
+    timers.push(timeoutId);
+    scheduled = true;
+  }
+
+  // Nếu đã qua toàn bộ mốc nhắc -> gửi ngay thông điệp quá giờ cuối cùng
+  if (!scheduled && MILK_REMINDER_SCHEDULE.length > 0 && typeof callback === 'function') {
+    const lastReminder = MILK_REMINDER_SCHEDULE[MILK_REMINDER_SCHEDULE.length - 1];
+    const timeoutId = setTimeout(() => callback(lastReminder.message), 0);
     timers.push(timeoutId);
   }
   

@@ -203,7 +203,7 @@ const handleMilkLog = async (chatId, amountMl, timeStr = null) => {
   
   // Đặt nhiều nhắc nhở với callback gửi tin nhắn cho cả nhóm
   // Dùng primaryChatId làm key để tránh duplicate reminders
-  setMilkReminder(primaryChatId, async (message) => {
+  setMilkReminder(primaryChatId, recordedAt, async (message) => {
     await sendReminderToGroup(chatId, message);
   });
   
