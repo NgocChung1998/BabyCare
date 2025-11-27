@@ -373,7 +373,9 @@ export const registerVaccineHandler = () => {
         return;
       }
       // Lưu ngày và chuyển sang chọn vaccine
-      setState(chatId, { type: 'vaccine_name', date: text });
+      const dateText = text; // Lưu text gốc để dùng lại
+      console.log(`[Vaccine] User nhập ngày: ${dateText}, parsed: ${date.format('YYYY-MM-DD')}`);
+      setState(chatId, { type: 'vaccine_name', date: dateText });
       await showVaccineSelection(chatId);
       return;
     }
@@ -460,17 +462,19 @@ export const registerVaccineHandler = () => {
       const index = parseInt(query.data.replace('vaccine_select_', ''), 10);
       const vaccineName = commonVaccines[index];
       const state = getState(chatId);
-      console.log(`[Vaccine] vaccine_select callback, index=${index}, vaccineName=${vaccineName}, state=`, state);
+      console.log(`[Vaccine] vaccine_select callback, index=${index}, vaccineName=${vaccineName}, state=`, JSON.stringify(state));
       
-      // Kiểm tra xem có date trong state không
-      if (state?.type === 'vaccine_name' && state?.date) {
+      // Kiểm tra xem có date trong state không (check cả type và date)
+      if (state && (state.date || (state.type === 'vaccine_name' && state.date))) {
         // Đã có ngày -> thêm luôn
-        await bot.answerCallbackQuery(query.id, { text: `Đã chọn ${vaccineName}` });
         const date = state.date;
+        console.log(`[Vaccine] Đã có ngày trong state: ${date}, thêm vaccine ${vaccineName}`);
+        await bot.answerCallbackQuery(query.id, { text: `Đã chọn ${vaccineName}` });
         clearState(chatId);
         await handleVaccineAdd(chatId, date, vaccineName);
       } else {
         // Chưa có ngày -> hỏi ngày trước
+        console.log(`[Vaccine] Chưa có ngày trong state, hỏi lại ngày cho vaccine ${vaccineName}`);
         await bot.answerCallbackQuery(query.id, { text: `Chọn ${vaccineName}! Nhập ngày tiêm...` });
         clearState(chatId); // Clear state cũ để tránh conflict
         setState(chatId, { type: 'vaccine_date_for_name', vaccineName });
@@ -485,14 +489,15 @@ export const registerVaccineHandler = () => {
     if (query.data === 'vaccine_custom') {
       await bot.answerCallbackQuery(query.id);
       const state = getState(chatId);
-      console.log(`[Vaccine] vaccine_custom callback, state=`, state);
+      console.log(`[Vaccine] vaccine_custom callback, state=`, JSON.stringify(state));
       
-      if (state?.type === 'vaccine_name' && state?.date) {
-        // Đã có ngày -> chỉ cần nhập tên vaccine
+      if (state && state.date) {
+        // Đã có ngày -> chỉ cần nhập tên vaccine (giữ nguyên date)
         setState(chatId, { type: 'vaccine_name', date: state.date });
         await safeSendMessage(chatId, '💉 Nhập tên vaccine:');
       } else {
         // Chưa có ngày -> hỏi lại ngày
+        console.log(`[Vaccine] Chưa có ngày, hỏi lại ngày`);
         clearState(chatId);
         setState(chatId, { type: 'vaccine_date' });
         await safeSendMessage(

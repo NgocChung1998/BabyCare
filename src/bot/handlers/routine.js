@@ -54,7 +54,7 @@ const parseSimpleTime = (input) => {
 };
 
 /**
- * Hiển thị menu lịch ăn ngủ
+ * Hiển thị menu lịch ăn ngủ với thông tin tổng quát
  */
 const showRoutineMenu = async (chatId) => {
   const profile = await ChatProfile.findOne({ chatId });
@@ -81,26 +81,156 @@ const showRoutineMenu = async (chatId) => {
   const schedule = getScheduleByAge(ageMonths);
   const ageText = formatAge(profile.dateOfBirth);
   
+  // Lấy thông tin ăn gần nhất
+  const todayStart = now.startOf('day').toDate();
+  const lastFeed = await Feeding.findOne({
+    chatId,
+    recordedAt: { $gte: todayStart }
+  }).sort({ recordedAt: -1 });
+  
+  // Lấy thông tin ngủ gần nhất
+  const lastSleep = await SleepSession.findOne({
+    chatId,
+    start: { $gte: todayStart }
+  }).sort({ start: -1 });
+  
+  // Kiểm tra trạng thái ngủ hiện tại
+  const isSleeping = sleepSessionTracker.has(chatId);
+  
   const lines = [
     '━━━━━━━━━━━━━━━━━━━━',
-    '📅 LỊCH ĂN NGỦ HÀNG NGÀY',
+    '📅 LỊCH ĂN NGỦ HÔM NAY',
     '━━━━━━━━━━━━━━━━━━━━',
     '',
     `👶 Tuổi bé: ${ageText}`,
+    `📅 ${now.format('DD/MM/YYYY')} • ⏰ ${now.format('HH:mm')}`,
     '',
     '━━━━━━━━━━━━━━━━━━━━',
-    '📊 KHUYẾN NGHỊ THEO ĐỘ TUỔI:',
+    '🍼 THÔNG TIN ĂN',
     '━━━━━━━━━━━━━━━━━━━━',
-    '',
-    `🍼 Cữ ăn: mỗi ${schedule.feedingIntervalHours}h`,
-    `😴 Tổng giấc ngủ: ${schedule.totalSleep}`,
-    `🌙 Ngủ đêm: ${schedule.nightSleep}`,
-    `☀️ Giấc ngày: ${schedule.naps}`,
-    '',
-    '━━━━━━━━━━━━━━━━━━━━',
-    '',
-    '👇 Chọn để xem chi tiết:'
+    ''
   ];
+  
+  // Thông tin ăn
+  if (lastFeed) {
+    const feedTime = dayjs.tz(lastFeed.recordedAt, VIETNAM_TZ);
+    const feedTimeStr = feedTime.format('HH:mm');
+    const minutesSince = Math.round((now.toDate().getTime() - feedTime.toDate().getTime()) / 60000);
+    const hoursSince = Math.floor(minutesSince / 60);
+    const minsSince = minutesSince % 60;
+    
+    let sinceStr;
+    if (hoursSince > 0) {
+      sinceStr = `${hoursSince}h${minsSince > 0 ? `${minsSince}p` : ''} trước`;
+    } else {
+      sinceStr = `${minsSince}p trước`;
+    }
+    
+    // Tính cữ tiếp theo
+    const nextFeedTime = feedTime.add(schedule.feedingIntervalHours, 'hour');
+    const minutesUntil = Math.round((nextFeedTime.toDate().getTime() - now.toDate().getTime()) / 60000);
+    const hoursUntil = Math.floor(minutesUntil / 60);
+    const minsUntil = minutesUntil % 60;
+    
+    let untilStr;
+    if (minutesUntil <= 0) {
+      untilStr = '⏰ Đã đến giờ ăn!';
+    } else if (hoursUntil > 0) {
+      untilStr = `còn ${hoursUntil}h${minsUntil > 0 ? `${minsUntil}p` : ''}`;
+    } else {
+      untilStr = `còn ${minsUntil}p`;
+    }
+    
+    lines.push(`✅ Vừa ăn: ${feedTimeStr} (${lastFeed.amountMl}ml)`);
+    lines.push(`   └─ ${sinceStr}`);
+    lines.push('');
+    lines.push(`⏳ Cữ tiếp theo: ${nextFeedTime.format('HH:mm')}`);
+    lines.push(`   └─ ${untilStr}`);
+  } else {
+    lines.push('📋 Chưa có cữ ăn hôm nay');
+    lines.push('');
+    lines.push(`💡 Khuyến nghị: mỗi ${schedule.feedingIntervalHours}h`);
+  }
+  
+  lines.push('');
+  lines.push('━━━━━━━━━━━━━━━━━━━━');
+  lines.push('😴 THÔNG TIN NGỦ');
+  lines.push('━━━━━━━━━━━━━━━━━━━━');
+  lines.push('');
+  
+  // Thông tin ngủ
+  if (isSleeping) {
+    const startTime = sleepSessionTracker.get(chatId);
+    const startStr = dayjs.tz(startTime, VIETNAM_TZ).format('HH:mm');
+    const elapsed = Math.round((now.toDate().getTime() - startTime.getTime()) / 60000);
+    const elapsedHours = Math.floor(elapsed / 60);
+    const elapsedMins = elapsed % 60;
+    const elapsedStr = elapsedHours > 0 
+      ? `${elapsedHours}h${elapsedMins > 0 ? `${elapsedMins}p` : ''}`
+      : `${elapsedMins}p`;
+    
+    lines.push('🟢 ĐANG NGỦ');
+    lines.push(`   └─ Bắt đầu: ${startStr}`);
+    lines.push(`   └─ Đã ngủ: ${elapsedStr}`);
+  } else {
+    lines.push('⚪ ĐANG THỨC');
+    
+    if (lastSleep && lastSleep.end) {
+      const sleepEnd = dayjs.tz(lastSleep.end, VIETNAM_TZ);
+      const sleepEndStr = sleepEnd.format('HH:mm');
+      const minutesSince = Math.round((now.toDate().getTime() - sleepEnd.toDate().getTime()) / 60000);
+      const hoursSince = Math.floor(minutesSince / 60);
+      const minsSince = minutesSince % 60;
+      
+      let sinceStr;
+      if (hoursSince > 0) {
+        sinceStr = `${hoursSince}h${minsSince > 0 ? `${minsSince}p` : ''} trước`;
+      } else {
+        sinceStr = `${minsSince}p trước`;
+      }
+      
+      const durationHours = Math.floor(lastSleep.durationMinutes / 60);
+      const durationMins = lastSleep.durationMinutes % 60;
+      const durationStr = durationHours > 0 
+        ? `${durationHours}h${durationMins > 0 ? `${durationMins}p` : ''}`
+        : `${durationMins}p`;
+      
+      lines.push(`   └─ Giấc gần nhất: ${durationStr} (dậy ${sleepEndStr})`);
+      lines.push(`   └─ Đã thức: ${sinceStr}`);
+    } else {
+      lines.push('   └─ Chưa có giấc ngủ hôm nay');
+    }
+  }
+  
+  lines.push('');
+  lines.push('━━━━━━━━━━━━━━━━━━━━');
+  lines.push('📊 LỊCH DỰ KIẾN THEO TUỔI');
+  lines.push('━━━━━━━━━━━━━━━━━━━━');
+  lines.push('');
+  
+  // Hiển thị lịch dự kiến theo tuổi
+  lines.push('🍼 CỮ ĂN:');
+  schedule.feeds.forEach((feedTime, i) => {
+    const isPast = feedTime < now.format('HH:mm');
+    const icon = isPast ? '✅' : '⏳';
+    lines.push(`   ${icon} ${feedTime}`);
+  });
+  
+  lines.push('');
+  lines.push('😴 GIẤC NGỦ:');
+  schedule.sleeps.forEach((sleep, i) => {
+    const isPast = sleep.start < now.format('HH:mm');
+    const icon = isPast ? '✅' : '⏳';
+    const durationStr = sleep.duration >= 60 
+      ? `${Math.floor(sleep.duration/60)}h${sleep.duration%60 > 0 ? (sleep.duration%60) + 'p' : ''}`
+      : `${sleep.duration}p`;
+    lines.push(`   ${icon} ${sleep.start} - ${sleep.name} (~${durationStr})`);
+  });
+  
+  lines.push('');
+  lines.push('━━━━━━━━━━━━━━━━━━━━');
+  lines.push('');
+  lines.push('👇 Chọn để xem chi tiết:');
   
   await safeSendMessage(chatId, lines.join('\n'), routineInlineKeyboard);
 };
