@@ -101,14 +101,57 @@ const generateTimeButtons = (minutesBefore = 25, stepMinutes = 5, type = 'sleep'
 };
 
 /**
+ * Lấy thời gian thức khuyến nghị theo độ tuổi (phút)
+ */
+const getRecommendedAwakeTime = (ageMonths) => {
+  if (ageMonths < 3) return { min: 45, max: 90 }; // 45-90 phút
+  if (ageMonths < 6) return { min: 90, max: 150 }; // 1.5-2.5h
+  if (ageMonths < 9) return { min: 120, max: 180 }; // 2-3h
+  if (ageMonths < 12) return { min: 150, max: 240 }; // 2.5-4h
+  if (ageMonths < 18) return { min: 180, max: 300 }; // 3-5h
+  if (ageMonths < 24) return { min: 240, max: 360 }; // 4-6h
+  return { min: 300, max: 420 }; // 5-7h
+};
+
+/**
+ * Lấy thời gian ngủ khuyến nghị theo độ tuổi (phút)
+ */
+const getRecommendedNapDuration = (ageMonths) => {
+  if (ageMonths < 3) return { min: 30, max: 120 }; // 30p-2h
+  if (ageMonths < 6) return { min: 45, max: 120 }; // 45p-2h
+  if (ageMonths < 9) return { min: 60, max: 120 }; // 1-2h
+  if (ageMonths < 12) return { min: 60, max: 120 }; // 1-2h
+  return { min: 60, max: 150 }; // 1-2.5h
+};
+
+/**
  * Hiển thị menu ngủ với trạng thái - KHÔNG thực hiện hành động luôn
  */
 const showSleepMenu = async (chatId) => {
   // Lấy tất cả chatId trong nhóm để query dữ liệu chung
   const groupChatIds = await getGroupChatIds(chatId);
-  const status = getSleepStatus(chatId) || getSleepStatus(groupChatIds[0]); // Check cả primary
-  const lastSleep = await SleepSession.findOne({ chatId: { $in: groupChatIds } }).sort({ end: -1 });
+  const primaryChatId = groupChatIds[0];
+  
+  // Kiểm tra trạng thái ngủ từ primary chatId
+  const status = getSleepStatus(primaryChatId);
+  
+  // Lấy giấc ngủ gần nhất đã hoàn thành (có end)
+  const lastCompletedSleep = await SleepSession.findOne({ 
+    chatId: { $in: groupChatIds },
+    end: { $exists: true, $ne: null }
+  }).sort({ end: -1 });
+  
+  // Lấy cữ ăn gần nhất
   const lastFeed = await Feeding.findOne({ chatId: { $in: groupChatIds } }).sort({ recordedAt: -1 });
+  
+  // Lấy tuổi bé để tính khuyến nghị
+  const profile = await ChatProfile.findOne({ chatId: { $in: groupChatIds }, dateOfBirth: { $exists: true } });
+  const ageMonths = profile?.dateOfBirth 
+    ? dayjs().diff(dayjs(profile.dateOfBirth), 'month')
+    : 6; // Mặc định 6 tháng
+  
+  const awakeTimeRec = getRecommendedAwakeTime(ageMonths);
+  const napDurationRec = getRecommendedNapDuration(ageMonths);
   
   const lines = [
     '━━━━━━━━━━━━━━━━━━━━',
@@ -125,14 +168,24 @@ const showSleepMenu = async (chatId) => {
       ? `${elapsedHours}h${elapsedMins > 0 ? `${elapsedMins}p` : ''}`
       : `${elapsedMins}p`;
     
-    // Dự đoán giờ dậy (dựa trên giấc ngủ trung bình ~90 phút)
-    const estimatedWake = dayjs(status.startTime).add(90, 'minute').format('HH:mm');
+    // Dự đoán giờ dậy (dựa trên khuyến nghị theo tuổi)
+    const avgNapMins = Math.round((napDurationRec.min + napDurationRec.max) / 2);
+    const estimatedWake = dayjs(status.startTime).add(avgNapMins, 'minute');
+    const estimatedWakeStr = estimatedWake.format('HH:mm');
+    
+    // Tính thời gian còn lại đến giờ dậy dự kiến
+    const remainingMins = Math.max(0, avgNapMins - status.elapsedMinutes);
+    const remainingStr = remainingMins > 0 ? `còn ~${remainingMins}p` : 'có thể dậy sớm';
     
     lines.push('🟢 BÉ ĐANG NGỦ');
     lines.push('');
     lines.push(`⏰ Bắt đầu: ${startStr}`);
     lines.push(`⏱️ Đã ngủ: ${elapsedStr}`);
-    lines.push(`💭 Dự kiến dậy: ~${estimatedWake}`);
+    lines.push('');
+    lines.push(`💭 Dự kiến dậy: ~${estimatedWakeStr}`);
+    lines.push(`   └─ ${remainingStr}`);
+    lines.push('');
+    lines.push(`📊 Khuyến nghị (${ageMonths} tháng): ${napDurationRec.min}-${napDurationRec.max}p`);
     lines.push('');
     lines.push('━━━━━━━━━━━━━━━━━━━━');
     lines.push('');
@@ -141,15 +194,19 @@ const showSleepMenu = async (chatId) => {
     lines.push('⚪ BÉ ĐANG THỨC');
     lines.push('');
     
-    if (lastSleep && lastSleep.end) {
-      const lastEndStr = dayjs(lastSleep.end).format('HH:mm');
-      const lastHours = Math.floor(lastSleep.durationMinutes / 60);
-      const lastMins = lastSleep.durationMinutes % 60;
+    let awakeMinutes = 0;
+    let lastWakeTime = null;
+    
+    if (lastCompletedSleep && lastCompletedSleep.end) {
+      lastWakeTime = dayjs(lastCompletedSleep.end);
+      const lastEndStr = lastWakeTime.format('HH:mm');
+      const lastHours = Math.floor(lastCompletedSleep.durationMinutes / 60);
+      const lastMins = lastCompletedSleep.durationMinutes % 60;
       const lastDurationStr = lastHours > 0 
         ? `${lastHours}h${lastMins > 0 ? `${lastMins}p` : ''}`
         : `${lastMins}p`;
       
-      const awakeMinutes = Math.round((Date.now() - new Date(lastSleep.end).getTime()) / 60000);
+      awakeMinutes = Math.round((Date.now() - new Date(lastCompletedSleep.end).getTime()) / 60000);
       const awakeHours = Math.floor(awakeMinutes / 60);
       const awakeMins = awakeMinutes % 60;
       const awakeStr = awakeHours > 0 
@@ -159,8 +216,35 @@ const showSleepMenu = async (chatId) => {
       lines.push(`📋 Giấc ngủ gần nhất:`);
       lines.push(`   └─ ${lastDurationStr} (dậy lúc ${lastEndStr})`);
       lines.push(`   └─ Đã thức: ${awakeStr}`);
+      
+      // Tính giờ ngủ tiếp theo khuyến nghị
+      const avgAwakeTime = Math.round((awakeTimeRec.min + awakeTimeRec.max) / 2);
+      const nextSleepTime = lastWakeTime.add(avgAwakeTime, 'minute');
+      const nextSleepStr = nextSleepTime.format('HH:mm');
+      const minsUntilSleep = Math.round((nextSleepTime.toDate().getTime() - Date.now()) / 60000);
+      
+      lines.push('');
+      lines.push('━━━━━━━━━━━━━━━━━━━━');
+      lines.push('💡 KHUYẾN NGHỊ (theo chuyên gia)');
+      lines.push('━━━━━━━━━━━━━━━━━━━━');
+      lines.push('');
+      lines.push(`📊 Thời gian thức (${ageMonths} tháng):`);
+      lines.push(`   └─ Khuyến nghị: ${awakeTimeRec.min}-${awakeTimeRec.max}p`);
+      lines.push('');
+      
+      if (minsUntilSleep > 0) {
+        lines.push(`⏰ Nên cho ngủ: ~${nextSleepStr}`);
+        lines.push(`   └─ còn ${minsUntilSleep}p nữa`);
+      } else {
+        lines.push(`⚠️ ĐÃ QUÁ GIỜ NGỦ!`);
+        lines.push(`   └─ Nên cho bé ngủ ngay`);
+      }
     } else {
       lines.push('📋 Chưa có giấc ngủ được ghi nhận');
+      lines.push('');
+      lines.push(`💡 Khuyến nghị (${ageMonths} tháng):`);
+      lines.push(`   └─ Thức: ${awakeTimeRec.min}-${awakeTimeRec.max}p`);
+      lines.push(`   └─ Ngủ nap: ${napDurationRec.min}-${napDurationRec.max}p`);
     }
     
     if (lastFeed) {
@@ -172,20 +256,28 @@ const showSleepMenu = async (chatId) => {
     lines.push('');
     lines.push('━━━━━━━━━━━━━━━━━━━━');
     lines.push('');
-    lines.push('👇 Bé bắt đầu ngủ? Bấm nút bên dưới:');
+    lines.push('👇 Chọn hành động:');
   }
   
-  // Keyboard với nút hành động ngược lại
-  const sleepKeyboard = buildInlineKeyboard([
-    status.isSleeping
-      ? [{ text: '⏹️ Bé đã dậy - Kết thúc ngủ', callback_data: 'sleep_confirm_stop' }]
-      : [{ text: '▶️ Bé bắt đầu ngủ', callback_data: 'sleep_confirm_start' }],
-    [
-      { text: '📊 Thống kê tuần', callback_data: 'sleep_stats' }
-    ]
+  // Keyboard với nút hành động và liên kết
+  const buttons = [];
+  
+  if (status.isSleeping) {
+    buttons.push([{ text: '⏹️ Bé đã dậy - Kết thúc ngủ', callback_data: 'sleep_confirm_stop' }]);
+    buttons.push([{ text: '✏️ Sửa giờ bắt đầu ngủ', callback_data: 'sleep_edit_start' }]);
+  } else {
+    buttons.push([{ text: '▶️ Bé bắt đầu ngủ', callback_data: 'sleep_confirm_start' }]);
+  }
+  
+  buttons.push([
+    { text: '🍼 Ghi cữ ăn', callback_data: 'go_milk' },
+    { text: '📅 Lịch ăn ngủ', callback_data: 'go_routine' }
+  ]);
+  buttons.push([
+    { text: '📊 Thống kê tuần', callback_data: 'sleep_stats' }
   ]);
   
-  await safeSendMessage(chatId, lines.join('\n'), sleepKeyboard);
+  await safeSendMessage(chatId, lines.join('\n'), buildInlineKeyboard(buttons));
 };
 
 /**
@@ -522,6 +614,21 @@ export const registerSleepHandler = () => {
       await handleSleepStats(chatId);
       return;
     }
+    
+    // ===== NAVIGATION LINKS =====
+    if (query.data === 'go_milk') {
+      await bot.answerCallbackQuery(query.id);
+      const { showMilkMenu } = await import('./milk.js');
+      await showMilkMenu(chatId);
+      return;
+    }
+    
+    if (query.data === 'go_routine') {
+      await bot.answerCallbackQuery(query.id);
+      const { showRoutineMenu } = await import('./routine.js');
+      await showRoutineMenu(chatId);
+      return;
+    }
   });
   
   // Xử lý input thủ công
@@ -564,4 +671,5 @@ export const registerSleepHandler = () => {
   });
 };
 
+export { showSleepMenu };
 export default registerSleepHandler;

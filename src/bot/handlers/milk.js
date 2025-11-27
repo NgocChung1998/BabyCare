@@ -85,8 +85,10 @@ const MILK_AMOUNTS = [120, 150, 170, 180, 200, 220, 250, 300];
 const showMilkMenu = async (chatId) => {
   // Lấy tất cả chatId trong nhóm để query dữ liệu chung
   const groupChatIds = await getGroupChatIds(chatId);
+  const primaryChatId = groupChatIds[0];
   const lastFeed = await Feeding.findOne({ chatId: { $in: groupChatIds } }).sort({ recordedAt: -1 });
-  const isSleeping = sleepSessionTracker.has(chatId);
+  // Kiểm tra trạng thái ngủ từ primaryChatId
+  const isSleeping = sleepSessionTracker.has(primaryChatId);
   
   const lines = [
     '━━━━━━━━━━━━━━━━━━━━',
@@ -97,7 +99,7 @@ const showMilkMenu = async (chatId) => {
   
   // Trạng thái ngủ
   if (isSleeping) {
-    const startTime = sleepSessionTracker.get(chatId);
+    const startTime = sleepSessionTracker.get(primaryChatId);
     const startStr = dayjs(startTime).format('HH:mm');
     lines.push(`😴 Bé đang ngủ (từ ${startStr})`);
     lines.push('');
@@ -149,6 +151,10 @@ const showMilkMenu = async (chatId) => {
   }
   amountButtons.push([{ text: '✏️ Nhập số khác', callback_data: 'milk_custom_amount' }]);
   amountButtons.push([{ text: '📝 Sửa giờ cữ trước', callback_data: 'milk_edit_time' }]);
+  amountButtons.push([
+    { text: '😴 Nhật ký ngủ', callback_data: 'go_sleep' },
+    { text: '📅 Lịch ăn ngủ', callback_data: 'go_routine' }
+  ]);
   
   await safeSendMessage(chatId, lines.join('\n'), buildInlineKeyboard(amountButtons));
 };
@@ -356,6 +362,21 @@ export const registerMilkHandler = () => {
       await bot.answerCallbackQuery(query.id, { text: 'Đã hủy' });
       clearState(chatId);
       await showMilkMenu(chatId);
+      return;
+    }
+    
+    // ===== NAVIGATION LINKS =====
+    if (query.data === 'go_sleep') {
+      await bot.answerCallbackQuery(query.id);
+      const { showSleepMenu } = await import('./sleep.js');
+      await showSleepMenu(chatId);
+      return;
+    }
+    
+    if (query.data === 'go_routine') {
+      await bot.answerCallbackQuery(query.id);
+      const { showRoutineMenu } = await import('./routine.js');
+      await showRoutineMenu(chatId);
       return;
     }
   });
