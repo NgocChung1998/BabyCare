@@ -1,9 +1,9 @@
 import dayjs from 'dayjs';
 import { bot, safeSendMessage } from '../index.js';
-import { Feeding } from '../../database/models/index.js';
+import { Feeding, SyncGroup } from '../../database/models/index.js';
 import { mainKeyboard, buildInlineKeyboard } from '../keyboard.js';
 import { clearState, setState, getState } from '../../utils/stateManager.js';
-import { setMilkReminder } from '../../services/reminderService.js';
+import { setMilkReminder, clearMilkReminder } from '../../services/reminderService.js';
 import { sleepSessionTracker } from './sleep.js';
 
 /**
@@ -151,6 +151,31 @@ const showMilkMenu = async (chatId) => {
 };
 
 /**
+ * Gửi nhắc nhở cho cả nhóm đồng bộ (nếu có)
+ */
+const sendReminderToGroup = async (chatId, message) => {
+  // Gửi cho chatId chính
+  await safeSendMessage(chatId, message, mainKeyboard);
+  
+  // Tìm nhóm và gửi cho các thành viên khác
+  try {
+    const group = await SyncGroup.findOne({ 
+      'members.chatId': chatId,
+      isActive: true 
+    });
+    
+    if (group) {
+      const otherMembers = group.members.filter(m => m.chatId !== chatId);
+      for (const member of otherMembers) {
+        await safeSendMessage(member.chatId, message, mainKeyboard);
+      }
+    }
+  } catch (error) {
+    console.error('[Milk] Error sending reminder to group:', error);
+  }
+};
+
+/**
  * Ghi nhận cữ ăn
  */
 const handleMilkLog = async (chatId, amountMl, timeStr = null) => {
@@ -171,8 +196,10 @@ const handleMilkLog = async (chatId, amountMl, timeStr = null) => {
   
   const timeDisplay = dayjs(recordedAt).format('HH:mm');
   
-  // Đặt nhắc nhở sau 2.5h
-  setMilkReminder(chatId, 150); // 150 phút = 2.5h
+  // Đặt nhiều nhắc nhở với callback gửi tin nhắn cho cả nhóm
+  setMilkReminder(chatId, async (message) => {
+    await sendReminderToGroup(chatId, message);
+  });
   
   const nextFeedTime = dayjs(recordedAt).add(2.5, 'hour').format('HH:mm');
   
@@ -184,6 +211,11 @@ const handleMilkLog = async (chatId, amountMl, timeStr = null) => {
     `🍼 ${amountMl}ml lúc ${timeDisplay}`,
     '',
     `⏰ Nhắc cữ tiếp: ~${nextFeedTime}`,
+    '',
+    '📢 Lịch nhắc:',
+    '   • Trước 30p, 10p',
+    '   • Đúng giờ',
+    '   • Quá 15p, 30p',
     '',
     '━━━━━━━━━━━━━━━━━━━━'
   ];

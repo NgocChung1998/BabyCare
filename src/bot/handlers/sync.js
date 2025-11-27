@@ -379,12 +379,12 @@ export const registerSyncHandler = () => {
       
       const keyboard = buildInlineKeyboard([
         [
-          { text: '👨 Bố', callback_data: 'sync_name_Bố' },
-          { text: '👩 Mẹ', callback_data: 'sync_name_Mẹ' }
+          { text: '👨 Bố', callback_data: 'sync_role_bo' },
+          { text: '👩 Mẹ', callback_data: 'sync_role_me' }
         ],
         [
-          { text: '👴 Ông', callback_data: 'sync_name_Ông' },
-          { text: '👵 Bà', callback_data: 'sync_name_Bà' }
+          { text: '👴 Ông', callback_data: 'sync_role_ong' },
+          { text: '👵 Bà', callback_data: 'sync_role_ba' }
         ],
         [
           { text: '❌ Hủy', callback_data: 'sync_menu' }
@@ -405,12 +405,12 @@ export const registerSyncHandler = () => {
       
       const keyboard = buildInlineKeyboard([
         [
-          { text: '👨 Bố', callback_data: 'sync_name_Bố' },
-          { text: '👩 Mẹ', callback_data: 'sync_name_Mẹ' }
+          { text: '👨 Bố', callback_data: 'sync_role_bo' },
+          { text: '👩 Mẹ', callback_data: 'sync_role_me' }
         ],
         [
-          { text: '👴 Ông', callback_data: 'sync_name_Ông' },
-          { text: '👵 Bà', callback_data: 'sync_name_Bà' }
+          { text: '👴 Ông', callback_data: 'sync_role_ong' },
+          { text: '👵 Bà', callback_data: 'sync_role_ba' }
         ],
         [
           { text: '❌ Hủy', callback_data: 'sync_menu' }
@@ -425,15 +425,25 @@ export const registerSyncHandler = () => {
       return;
     }
     
-    // Chọn tên nhanh
-    if (query.data.startsWith('sync_name_')) {
-      const displayName = query.data.replace('sync_name_', '');
-      await bot.answerCallbackQuery(query.id, { text: displayName });
+    // Chọn vai trò nhanh (dùng mã ASCII thay vì tiếng Việt)
+    if (query.data.startsWith('sync_role_')) {
+      const roleMap = {
+        'bo': 'Bố',
+        'me': 'Mẹ',
+        'ong': 'Ông',
+        'ba': 'Bà'
+      };
+      const roleKey = query.data.replace('sync_role_', '');
+      const displayName = roleMap[roleKey] || roleKey;
+      
+      await bot.answerCallbackQuery(query.id, { text: `Đã chọn: ${displayName}` });
       
       // Lấy state TRƯỚC khi clear
       const state = getState(chatId);
       const action = state?.action;
       clearState(chatId);
+      
+      console.log(`[Sync] Role selected: ${displayName}, action: ${action}, chatId: ${chatId}`);
       
       if (action === 'create') {
         await handleCreateGroup(chatId, displayName);
@@ -442,6 +452,7 @@ export const registerSyncHandler = () => {
         await safeSendMessage(chatId, '🔑 Nhập mã nhóm (6 ký tự):');
       } else {
         // Nếu không có action, quay lại menu
+        console.log(`[Sync] No action found, showing menu`);
         await showSyncMenu(chatId);
       }
       return;
