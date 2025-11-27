@@ -9,6 +9,7 @@ import { clearState, setState, getState } from '../../utils/stateManager.js';
 import { formatAge } from '../../utils/formatters.js';
 import { sleepSessionTracker } from './sleep.js';
 import { CONSTANTS } from '../../config/index.js';
+import { getGroupChatIds, notifySyncMembers } from './sync.js';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -58,7 +59,11 @@ const parseSimpleTime = (input) => {
  * Hiển thị menu lịch ăn ngủ với thông tin tổng quát
  */
 const showRoutineMenu = async (chatId) => {
-  const profile = await ChatProfile.findOne({ chatId });
+  // Lấy tất cả chatId trong nhóm
+  const groupChatIds = await getGroupChatIds(chatId);
+  const primaryChatId = groupChatIds[0];
+  
+  const profile = await ChatProfile.findOne({ chatId: { $in: groupChatIds }, dateOfBirth: { $exists: true } });
   
   if (!profile?.dateOfBirth) {
     await safeSendMessage(
@@ -82,21 +87,21 @@ const showRoutineMenu = async (chatId) => {
   const schedule = getScheduleByAge(ageMonths);
   const ageText = formatAge(profile.dateOfBirth);
   
-  // Lấy thông tin ăn gần nhất
+  // Lấy thông tin ăn gần nhất từ cả nhóm
   const todayStart = now.startOf('day').toDate();
   const lastFeed = await Feeding.findOne({
-    chatId,
+    chatId: { $in: groupChatIds },
     recordedAt: { $gte: todayStart }
   }).sort({ recordedAt: -1 });
   
-  // Lấy thông tin ngủ gần nhất
+  // Lấy thông tin ngủ gần nhất từ cả nhóm
   const lastSleep = await SleepSession.findOne({
-    chatId,
+    chatId: { $in: groupChatIds },
     start: { $gte: todayStart }
   }).sort({ start: -1 });
   
-  // Kiểm tra trạng thái ngủ hiện tại
-  const isSleeping = sleepSessionTracker.has(chatId);
+  // Kiểm tra trạng thái ngủ hiện tại (dùng primaryChatId)
+  const isSleeping = sleepSessionTracker.has(primaryChatId);
   
   const lines = [
     '━━━━━━━━━━━━━━━━━━━━',
@@ -234,14 +239,17 @@ const calculateNextFeedings = (lastFeedTime, intervalHours = 3.5, count = 5) => 
  * Hiện: đã ăn (✅ với button sửa) + tương lai dựa trên cữ gần nhất (⏳)
  */
 const showFeedingSchedule = async (chatId) => {
-  const profile = await ChatProfile.findOne({ chatId });
+  // Lấy tất cả chatId trong nhóm
+  const groupChatIds = await getGroupChatIds(chatId);
+  
+  const profile = await ChatProfile.findOne({ chatId: { $in: groupChatIds }, dateOfBirth: { $exists: true } });
   const now = dayjs.tz(dayjs(), VIETNAM_TZ);
   const currentTime = now.format('HH:mm');
   
-  // Lấy thông tin ăn thực tế hôm nay
+  // Lấy thông tin ăn thực tế hôm nay từ cả nhóm
   const todayStart = now.startOf('day').toDate();
   const actualFeeds = await Feeding.find({
-    chatId,
+    chatId: { $in: groupChatIds },
     recordedAt: { $gte: todayStart }
   }).sort({ recordedAt: 1 });
   
@@ -364,19 +372,23 @@ const showFeedingSchedule = async (chatId) => {
  * Hiện: đã ngủ (✅ với button sửa) + tương lai (⏳)
  */
 const showSleepSchedule = async (chatId) => {
-  const profile = await ChatProfile.findOne({ chatId });
+  // Lấy tất cả chatId trong nhóm
+  const groupChatIds = await getGroupChatIds(chatId);
+  const primaryChatId = groupChatIds[0];
+  
+  const profile = await ChatProfile.findOne({ chatId: { $in: groupChatIds }, dateOfBirth: { $exists: true } });
   const now = dayjs.tz(dayjs(), VIETNAM_TZ);
   const currentTime = now.format('HH:mm');
   
-  // Lấy thông tin ngủ thực tế hôm nay
+  // Lấy thông tin ngủ thực tế hôm nay từ cả nhóm
   const todayStart = now.startOf('day').toDate();
   const actualSleeps = await SleepSession.find({
-    chatId,
+    chatId: { $in: groupChatIds },
     start: { $gte: todayStart }
   }).sort({ start: 1 });
   
-  // Kiểm tra trạng thái ngủ hiện tại
-  const isSleeping = sleepSessionTracker.has(chatId);
+  // Kiểm tra trạng thái ngủ hiện tại (dùng primaryChatId)
+  const isSleeping = sleepSessionTracker.has(primaryChatId);
   
   const lines = [
     '━━━━━━━━━━━━━━━━━━━━',

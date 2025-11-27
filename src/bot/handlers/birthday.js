@@ -5,6 +5,7 @@ import { parseDate } from '../../utils/validators.js';
 import { formatAge } from '../../utils/formatters.js';
 import { clearState, setState, getState } from '../../utils/stateManager.js';
 import { mainKeyboard } from '../keyboard.js';
+import { getGroupChatIds, notifySyncMembers } from './sync.js';
 
 /**
  * Lưu ngày sinh bé
@@ -22,8 +23,13 @@ const handleBirthdaySet = async (chatId, dateText) => {
     return;
   }
   
+  // Lấy primary chatId để lưu chung
+  const groupChatIds = await getGroupChatIds(chatId);
+  const primaryChatId = groupChatIds[0];
+  
+  // Cập nhật cho primary chatId
   await ChatProfile.findOneAndUpdate(
-    { chatId }, 
+    { chatId: primaryChatId }, 
     { dateOfBirth: date.toDate() }, 
     { upsert: true, new: true }
   );
@@ -48,13 +54,18 @@ const handleBirthdaySet = async (chatId, dateText) => {
     lines.join('\n'),
     mainKeyboard
   );
+  
+  // Thông báo cho thành viên khác
+  await notifySyncMembers(chatId, `Đã cập nhật ngày sinh bé: ${date.format('DD/MM/YYYY')} (${ageText})`);
 };
 
 /**
  * Xem ngày sinh hiện tại
  */
 const handleBirthdayView = async (chatId) => {
-  const profile = await ChatProfile.findOne({ chatId });
+  // Lấy từ tất cả chatId trong nhóm
+  const groupChatIds = await getGroupChatIds(chatId);
+  const profile = await ChatProfile.findOne({ chatId: { $in: groupChatIds }, dateOfBirth: { $exists: true } });
   
   if (!profile?.dateOfBirth) {
     const lines = [

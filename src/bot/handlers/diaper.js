@@ -1,18 +1,36 @@
 import dayjs from 'dayjs';
 import { bot, safeSendMessage } from '../index.js';
 import { DiaperLog, SupplementLog } from '../../database/models/index.js';
-import { diaperInlineKeyboard } from '../keyboard.js';
+import { diaperInlineKeyboard, mainKeyboard } from '../keyboard.js';
 import { setDiaperReminder } from '../../services/reminderService.js';
 import { clearState } from '../../utils/stateManager.js';
+import { getGroupChatIds, notifySyncMembers } from './sync.js';
+
+/**
+ * Gửi nhắc tã cho cả nhóm
+ */
+const sendDiaperReminderToGroup = async (chatId, message) => {
+  const groupChatIds = await getGroupChatIds(chatId);
+  for (const memberId of groupChatIds) {
+    try {
+      await safeSendMessage(memberId, message, mainKeyboard);
+    } catch (error) {
+      console.error(`[Diaper] Error sending reminder to ${memberId}:`, error);
+    }
+  }
+};
 
 /**
  * Hiển thị menu diaper
  */
 const showDiaperMenu = async (chatId) => {
+  // Lấy tất cả chatId trong nhóm
+  const groupChatIds = await getGroupChatIds(chatId);
+  
   const today = dayjs().startOf('day').toDate();
   const [diaperCount, vdToday] = await Promise.all([
-    DiaperLog.countDocuments({ chatId, recordedAt: { $gte: today } }),
-    SupplementLog.findOne({ chatId, type: 'vitaminD', recordedAt: { $gte: today } })
+    DiaperLog.countDocuments({ chatId: { $in: groupChatIds }, recordedAt: { $gte: today } }),
+    SupplementLog.findOne({ chatId: { $in: groupChatIds }, type: 'vitaminD', recordedAt: { $gte: today } })
   ]);
 
   await safeSendMessage(
@@ -29,17 +47,21 @@ const showDiaperMenu = async (chatId) => {
  * Ghi nhận thay tã
  */
 const handleDiaperLog = async (chatId) => {
-  await DiaperLog.create({ chatId });
+  // Lấy primary chatId để lưu dữ liệu chung
+  const groupChatIds = await getGroupChatIds(chatId);
+  const primaryChatId = groupChatIds[0];
   
-  // Đặt nhắc sau 3-4 tiếng
-  setDiaperReminder(chatId, () => {
-    safeSendMessage(chatId, '🧷 Đã 3-4 tiếng rồi, bố/mẹ kiểm tra tã cho bé nhé!', {}, 'normal').catch((error) =>
+  await DiaperLog.create({ chatId: primaryChatId });
+  
+  // Đặt nhắc sau 3-4 tiếng cho cả nhóm
+  setDiaperReminder(primaryChatId, () => {
+    sendDiaperReminderToGroup(chatId, '🧷 Đã 3-4 tiếng rồi, bố/mẹ kiểm tra tã cho bé nhé!').catch((error) =>
       console.error('Lỗi nhắc tã:', error)
     );
   });
 
   const today = await DiaperLog.countDocuments({
-    chatId,
+    chatId: { $in: groupChatIds },
     recordedAt: { $gte: dayjs().startOf('day').toDate() }
   });
 
@@ -48,14 +70,21 @@ const handleDiaperLog = async (chatId) => {
     `🧷 Đã ghi nhận thay tã! (Hôm nay: ${today} lần)\n\n🔔 Em sẽ nhắc sau 3-4 tiếng nữa nhé!\n\n👇 Bấm nút để tiếp tục:`,
     diaperInlineKeyboard
   );
+  
+  // Thông báo cho thành viên khác
+  await notifySyncMembers(chatId, `Đã thay tã cho bé (hôm nay: ${today} lần)`);
 };
 
 /**
  * Ghi nhận Vitamin D
  */
 const handleVitaminD = async (chatId) => {
+  // Lấy tất cả chatId trong nhóm
+  const groupChatIds = await getGroupChatIds(chatId);
+  const primaryChatId = groupChatIds[0];
+  
   const today = dayjs().startOf('day').toDate();
-  const existing = await SupplementLog.findOne({ chatId, type: 'vitaminD', recordedAt: { $gte: today } });
+  const existing = await SupplementLog.findOne({ chatId: { $in: groupChatIds }, type: 'vitaminD', recordedAt: { $gte: today } });
   
   if (existing) {
     await safeSendMessage(
@@ -66,12 +95,15 @@ const handleVitaminD = async (chatId) => {
     return;
   }
 
-  await SupplementLog.create({ chatId, type: 'vitaminD' });
+  await SupplementLog.create({ chatId: primaryChatId, type: 'vitaminD' });
   await safeSendMessage(
     chatId,
     '☀️ Đã ghi nhận bé uống Vitamin D hôm nay!\n\n💡 Vitamin D giúp bé hấp thụ canxi tốt hơn.\n\n👇 Bấm nút để tiếp tục:',
     diaperInlineKeyboard
   );
+  
+  // Thông báo cho thành viên khác
+  await notifySyncMembers(chatId, 'Đã cho bé uống Vitamin D');
 };
 
 /**

@@ -3,14 +3,19 @@ import { bot, safeSendMessage } from '../index.js';
 import { PottyLog } from '../../database/models/index.js';
 import { mainKeyboard, pottyInlineKeyboard } from '../keyboard.js';
 import { clearState } from '../../utils/stateManager.js';
+import { getGroupChatIds, notifySyncMembers } from './sync.js';
 
 /**
  * Ghi nhận tè
  */
 const handlePee = async (chatId) => {
-  await PottyLog.create({ chatId, type: 'pee' });
+  // Lấy primary chatId để lưu dữ liệu chung
+  const groupChatIds = await getGroupChatIds(chatId);
+  const primaryChatId = groupChatIds[0];
+  
+  await PottyLog.create({ chatId: primaryChatId, type: 'pee' });
   const today = await PottyLog.countDocuments({
-    chatId,
+    chatId: { $in: groupChatIds },
     type: 'pee',
     recordedAt: { $gte: dayjs().startOf('day').toDate() }
   });
@@ -19,15 +24,22 @@ const handlePee = async (chatId) => {
     `💧 Đã ghi nhận bé tè! (Hôm nay: ${today} lần)\n\n💡 Bấm nút bên dưới để ghi tiếp:`,
     pottyInlineKeyboard
   );
+  
+  // Thông báo cho thành viên khác
+  await notifySyncMembers(chatId, `Bé vừa tè (hôm nay: ${today} lần)`);
 };
 
 /**
  * Ghi nhận ị
  */
 const handlePoo = async (chatId) => {
-  await PottyLog.create({ chatId, type: 'poo' });
+  // Lấy primary chatId để lưu dữ liệu chung
+  const groupChatIds = await getGroupChatIds(chatId);
+  const primaryChatId = groupChatIds[0];
+  
+  await PottyLog.create({ chatId: primaryChatId, type: 'poo' });
   const today = await PottyLog.countDocuments({
-    chatId,
+    chatId: { $in: groupChatIds },
     type: 'poo',
     recordedAt: { $gte: dayjs().startOf('day').toDate() }
   });
@@ -36,17 +48,23 @@ const handlePoo = async (chatId) => {
     `💩 Đã ghi nhận bé ị! (Hôm nay: ${today} lần)\n\n💡 Bấm nút bên dưới để ghi tiếp:`,
     pottyInlineKeyboard
   );
+  
+  // Thông báo cho thành viên khác
+  await notifySyncMembers(chatId, `Bé vừa ị (hôm nay: ${today} lần)`);
 };
 
 /**
  * Hiển thị menu potty
  */
 const showPottyMenu = async (chatId) => {
-  // Lấy số liệu hôm nay
+  // Lấy tất cả chatId trong nhóm
+  const groupChatIds = await getGroupChatIds(chatId);
+  
+  // Lấy số liệu hôm nay từ cả nhóm
   const today = dayjs().startOf('day').toDate();
   const [peeCount, pooCount] = await Promise.all([
-    PottyLog.countDocuments({ chatId, type: 'pee', recordedAt: { $gte: today } }),
-    PottyLog.countDocuments({ chatId, type: 'poo', recordedAt: { $gte: today } })
+    PottyLog.countDocuments({ chatId: { $in: groupChatIds }, type: 'pee', recordedAt: { $gte: today } }),
+    PottyLog.countDocuments({ chatId: { $in: groupChatIds }, type: 'poo', recordedAt: { $gte: today } })
   ]);
 
   await safeSendMessage(

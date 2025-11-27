@@ -105,12 +105,20 @@ const handleWeight = async (chatId, weightText) => {
     await safeSendMessage(chatId, '⚖️ Vui lòng nhập cân nặng hợp lệ (kg), ví dụ: 6.5');
     return;
   }
-  await GrowthLog.create({ chatId, weightKg: weight });
+  
+  // Lấy primary chatId để lưu dữ liệu chung
+  const groupChatIds = await getGroupChatIds(chatId);
+  const primaryChatId = groupChatIds[0];
+  
+  await GrowthLog.create({ chatId: primaryChatId, weightKg: weight });
   await safeSendMessage(
     chatId,
     `✅ Cập nhật thành công!\n\n⚖️ Cân nặng: ${formatNumber(weight)}kg\n\n💡 Bấm nút để tiếp tục:`,
     growthInlineKeyboard
   );
+  
+  // Thông báo cho thành viên khác
+  await notifySyncMembers(chatId, `Cập nhật cân nặng bé: ${formatNumber(weight)}kg`);
 };
 
 /**
@@ -122,12 +130,20 @@ const handleHeight = async (chatId, heightText) => {
     await safeSendMessage(chatId, '📏 Vui lòng nhập chiều cao hợp lệ (cm), ví dụ: 62');
     return;
   }
-  await GrowthLog.create({ chatId, heightCm: height });
+  
+  // Lấy primary chatId để lưu dữ liệu chung
+  const groupChatIds = await getGroupChatIds(chatId);
+  const primaryChatId = groupChatIds[0];
+  
+  await GrowthLog.create({ chatId: primaryChatId, heightCm: height });
   await safeSendMessage(
     chatId,
     `✅ Cập nhật thành công!\n\n📏 Chiều cao: ${formatNumber(height)}cm\n\n💡 Bấm nút để tiếp tục:`,
     growthInlineKeyboard
   );
+  
+  // Thông báo cho thành viên khác
+  await notifySyncMembers(chatId, `Cập nhật chiều cao bé: ${formatNumber(height)}cm`);
 };
 
 /**
@@ -141,7 +157,10 @@ const handleBabyInfoStatus = async (chatId) => {
  * Xem lịch sử (chỉ hiển thị lịch sử cân nặng, không có lịch tiêm chủng)
  */
 const handleGrowthHistory = async (chatId) => {
-  const logs = await GrowthLog.find({ chatId, weightKg: { $exists: true } }).sort({ recordedAt: -1 }).limit(10);
+  // Lấy tất cả chatId trong nhóm
+  const groupChatIds = await getGroupChatIds(chatId);
+  
+  const logs = await GrowthLog.find({ chatId: { $in: groupChatIds }, weightKg: { $exists: true } }).sort({ recordedAt: -1 }).limit(10);
   
   if (!logs.length) {
     await safeSendMessage(
