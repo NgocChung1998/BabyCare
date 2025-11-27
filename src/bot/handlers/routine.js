@@ -8,6 +8,7 @@ import { generateDailyRoutine, getScheduleByAge } from '../../services/routineSe
 import { clearState, setState, getState } from '../../utils/stateManager.js';
 import { formatAge } from '../../utils/formatters.js';
 import { sleepSessionTracker } from './sleep.js';
+import { CONSTANTS } from '../../config/index.js';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -719,6 +720,122 @@ export const registerRoutineHandler = () => {
       await showSleepSchedule(chatId);
       return;
     }
+    
+    // ===== XỬ LÝ INPUT KHI QUÊN BỮA ĂN =====
+    if (state?.type === 'missed_feed_input_time') {
+      const timeStr = parseSimpleTime(text);
+      if (!timeStr) {
+        await safeSendMessage(chatId, '❌ Không hiểu!\n\nNhập lại:\n• 9 → 09:00\n• 9 30 → 09:30');
+        return;
+      }
+      setState(chatId, { type: 'missed_feed_select_amount', timeStr });
+      
+      // Hiển thị keyboard chọn ml
+      const amountButtons = [];
+      for (let i = 0; i < MILK_AMOUNTS.length; i += 4) {
+        const row = [];
+        for (let j = i; j < i + 4 && j < MILK_AMOUNTS.length; j++) {
+          row.push({ 
+            text: `${MILK_AMOUNTS[j]}ml`, 
+            callback_data: `missed_feed_amount_${MILK_AMOUNTS[j]}` 
+          });
+        }
+        amountButtons.push(row);
+      }
+      amountButtons.push([{ text: '✏️ Nhập số khác', callback_data: 'missed_feed_custom_amount' }]);
+      
+      await safeSendMessage(
+        chatId,
+        `⏰ Giờ ăn: ${timeStr}\n\n👇 Bé ăn bao nhiêu ml?`,
+        buildInlineKeyboard(amountButtons)
+      );
+      return;
+    }
+    
+    if (state?.type === 'missed_feed_input_amount') {
+      const amount = parseInt(text, 10);
+      if (isNaN(amount) || amount <= 0) {
+        await safeSendMessage(chatId, '❌ Số không hợp lệ! Nhập lại số ml (ví dụ: 160)');
+        return;
+      }
+      const timeStr = state.timeStr;
+      clearState(chatId);
+      
+      // Lưu vào database
+      const now = dayjs.tz(dayjs(), VIETNAM_TZ);
+      const recordedAt = dayjs.tz(`${now.format('YYYY-MM-DD')} ${timeStr}`, VIETNAM_TZ).toDate();
+      await Feeding.create({ chatId, amountMl: amount, recordedAt });
+      
+      await safeSendMessage(
+        chatId,
+        `✅ Đã ghi nhận!\n\n🍼 ${amount}ml lúc ${timeStr}`,
+        mainKeyboard
+      );
+      return;
+    }
+    
+    // ===== XỬ LÝ INPUT KHI QUÊN GIẤC NGỦ =====
+    if (state?.type === 'missed_sleep_input_start') {
+      const timeStr = parseSimpleTime(text);
+      if (!timeStr) {
+        await safeSendMessage(chatId, '❌ Không hiểu!\n\nNhập lại:\n• 9 → 09:00\n• 9 30 → 09:30');
+        return;
+      }
+      clearState(chatId);
+      
+      // Hỏi bé đã dậy chưa
+      const sleepButtons = buildInlineKeyboard([
+        [
+          { text: '✅ Đã dậy rồi', callback_data: `missed_sleep_ended_${timeStr}` },
+          { text: '😴 Vẫn đang ngủ', callback_data: `missed_sleep_ongoing_${timeStr}` }
+        ]
+      ]);
+      
+      await safeSendMessage(
+        chatId,
+        `⏰ Bé ngủ từ: ${timeStr}\n\n👇 Bé đã dậy chưa?`,
+        sleepButtons
+      );
+      return;
+    }
+    
+    if (state?.type === 'missed_sleep_input_end') {
+      const timeStr = parseSimpleTime(text);
+      if (!timeStr) {
+        await safeSendMessage(chatId, '❌ Không hiểu!\n\nNhập lại:\n• 11 → 11:00\n• 11 30 → 11:30');
+        return;
+      }
+      const startTimeStr = state.startTimeStr;
+      clearState(chatId);
+      
+      // Lưu vào database
+      const now = dayjs.tz(dayjs(), VIETNAM_TZ);
+      const startTime = dayjs.tz(`${now.format('YYYY-MM-DD')} ${startTimeStr}`, VIETNAM_TZ).toDate();
+      const endTime = dayjs.tz(`${now.format('YYYY-MM-DD')} ${timeStr}`, VIETNAM_TZ).toDate();
+      const durationMinutes = Math.round((endTime.getTime() - startTime.getTime()) / 60000);
+      
+      if (durationMinutes <= 0) {
+        await safeSendMessage(chatId, '❌ Giờ dậy phải sau giờ ngủ!', mainKeyboard);
+        return;
+      }
+      
+      await SleepSession.create({
+        chatId,
+        start: startTime,
+        end: endTime,
+        durationMinutes
+      });
+      
+      const hours = Math.floor(durationMinutes / 60);
+      const mins = durationMinutes % 60;
+      
+      await safeSendMessage(
+        chatId,
+        `✅ Đã ghi nhận!\n\n😴 Ngủ: ${startTimeStr} → ${timeStr}\n⏱️ Thời gian: ${hours}h${mins}p`,
+        mainKeyboard
+      );
+      return;
+    }
   });
 
   // Callback queries
@@ -1169,6 +1286,300 @@ export const registerRoutineHandler = () => {
       await bot.answerCallbackQuery(query.id, { text: 'Đã hủy' });
       clearState(chatId);
       await showSleepSchedule(chatId);
+      return;
+    }
+    
+    // ===== XÁC NHẬN BỮA ĂN BỊ LỠ =====
+    if (query.data === 'missed_feed_yes') {
+      await bot.answerCallbackQuery(query.id);
+      // Hiển thị các button thời gian để chọn
+      const now = dayjs.tz(dayjs(), VIETNAM_TZ);
+      const timeButtons = [];
+      const row1 = [];
+      const row2 = [];
+      
+      // Tạo 6 mốc thời gian trong quá khứ
+      for (let i = 60; i >= 10; i -= 10) {
+        const time = now.subtract(i, 'minute').format('HH:mm');
+        const btn = { text: time, callback_data: `missed_feed_time_${time}` };
+        if (row1.length < 3) row1.push(btn);
+        else row2.push(btn);
+      }
+      
+      timeButtons.push(row1, row2);
+      timeButtons.push([{ text: '✏️ Nhập giờ khác', callback_data: 'missed_feed_custom' }]);
+      timeButtons.push([{ text: '❌ Hủy', callback_data: 'missed_feed_cancel' }]);
+      
+      await safeSendMessage(
+        chatId,
+        '🍼 Bé đã ăn lúc mấy giờ?\n\n👇 Chọn giờ:',
+        buildInlineKeyboard(timeButtons)
+      );
+      return;
+    }
+    
+    if (query.data === 'missed_feed_no') {
+      await bot.answerCallbackQuery(query.id);
+      await safeSendMessage(
+        chatId,
+        '🍼 OK! Bố/mẹ nhớ cho bé ăn sớm nhé!\n\n💡 Bấm nút "🍼 Ăn" để ghi nhận khi bé ăn.',
+        mainKeyboard
+      );
+      return;
+    }
+    
+    // Chọn giờ ăn khi xác nhận đã ăn
+    if (query.data.startsWith('missed_feed_time_')) {
+      const timeStr = query.data.replace('missed_feed_time_', '');
+      await bot.answerCallbackQuery(query.id, { text: `⏰ ${timeStr}` });
+      setState(chatId, { type: 'missed_feed_select_amount', timeStr });
+      
+      // Hiển thị keyboard chọn ml
+      const amountButtons = [];
+      for (let i = 0; i < MILK_AMOUNTS.length; i += 4) {
+        const row = [];
+        for (let j = i; j < i + 4 && j < MILK_AMOUNTS.length; j++) {
+          row.push({ 
+            text: `${MILK_AMOUNTS[j]}ml`, 
+            callback_data: `missed_feed_amount_${MILK_AMOUNTS[j]}` 
+          });
+        }
+        amountButtons.push(row);
+      }
+      amountButtons.push([{ text: '✏️ Nhập số khác', callback_data: 'missed_feed_custom_amount' }]);
+      
+      await safeSendMessage(
+        chatId,
+        `⏰ Giờ ăn: ${timeStr}\n\n👇 Bé ăn bao nhiêu ml?`,
+        buildInlineKeyboard(amountButtons)
+      );
+      return;
+    }
+    
+    // Nhập giờ ăn thủ công khi quên
+    if (query.data === 'missed_feed_custom') {
+      await bot.answerCallbackQuery(query.id);
+      setState(chatId, { type: 'missed_feed_input_time' });
+      await safeSendMessage(
+        chatId,
+        '✏️ Nhập giờ bé đã ăn:\n\n📝 Ví dụ:\n• 9 → 09:00\n• 9 30 → 09:30'
+      );
+      return;
+    }
+    
+    // Chọn ml khi xác nhận bữa ăn bị lỡ
+    if (query.data.startsWith('missed_feed_amount_')) {
+      const amount = parseInt(query.data.replace('missed_feed_amount_', ''), 10);
+      const state = getState(chatId);
+      const timeStr = state?.timeStr;
+      
+      await bot.answerCallbackQuery(query.id, { text: `🍼 ${amount}ml` });
+      clearState(chatId);
+      
+      // Lưu vào database
+      const now = dayjs.tz(dayjs(), VIETNAM_TZ);
+      const recordedAt = dayjs.tz(`${now.format('YYYY-MM-DD')} ${timeStr}`, VIETNAM_TZ).toDate();
+      await Feeding.create({ chatId, amountMl: amount, recordedAt });
+      
+      await safeSendMessage(
+        chatId,
+        `✅ Đã ghi nhận!\n\n🍼 ${amount}ml lúc ${timeStr}\n\n⏰ Em sẽ nhắc cữ tiếp theo sau ${CONSTANTS.MILK_INTERVAL_HOURS || 3}h nữa!`,
+        mainKeyboard
+      );
+      return;
+    }
+    
+    // Nhập ml thủ công khi quên
+    if (query.data === 'missed_feed_custom_amount') {
+      await bot.answerCallbackQuery(query.id);
+      const state = getState(chatId);
+      setState(chatId, { type: 'missed_feed_input_amount', timeStr: state?.timeStr });
+      await safeSendMessage(chatId, '✏️ Nhập số ml:\n\nVí dụ: 160');
+      return;
+    }
+    
+    if (query.data === 'missed_feed_cancel') {
+      await bot.answerCallbackQuery(query.id, { text: 'Đã hủy' });
+      clearState(chatId);
+      await safeSendMessage(chatId, '✅ OK!', mainKeyboard);
+      return;
+    }
+    
+    // ===== XÁC NHẬN GIẤC NGỦ BỊ LỠ =====
+    if (query.data === 'missed_sleep_yes') {
+      await bot.answerCallbackQuery(query.id);
+      // Hiển thị các button thời gian để chọn
+      const now = dayjs.tz(dayjs(), VIETNAM_TZ);
+      const timeButtons = [];
+      const row1 = [];
+      const row2 = [];
+      
+      // Tạo 6 mốc thời gian trong quá khứ
+      for (let i = 90; i >= 15; i -= 15) {
+        const time = now.subtract(i, 'minute').format('HH:mm');
+        const btn = { text: time, callback_data: `missed_sleep_start_${time}` };
+        if (row1.length < 3) row1.push(btn);
+        else row2.push(btn);
+      }
+      
+      timeButtons.push(row1, row2);
+      timeButtons.push([{ text: '✏️ Nhập giờ khác', callback_data: 'missed_sleep_custom_start' }]);
+      timeButtons.push([{ text: '❌ Hủy', callback_data: 'missed_sleep_cancel' }]);
+      
+      await safeSendMessage(
+        chatId,
+        '😴 Bé đã bắt đầu ngủ lúc mấy giờ?\n\n👇 Chọn giờ:',
+        buildInlineKeyboard(timeButtons)
+      );
+      return;
+    }
+    
+    if (query.data === 'missed_sleep_no') {
+      await bot.answerCallbackQuery(query.id);
+      await safeSendMessage(
+        chatId,
+        '😴 OK! Nếu bé buồn ngủ, bố/mẹ nhớ cho bé ngủ nhé!\n\n💡 Bấm nút "😴 Nhật ký ngủ" để ghi nhận.',
+        mainKeyboard
+      );
+      return;
+    }
+    
+    // Chọn giờ bắt đầu ngủ khi xác nhận đã ngủ
+    if (query.data.startsWith('missed_sleep_start_')) {
+      const startTimeStr = query.data.replace('missed_sleep_start_', '');
+      await bot.answerCallbackQuery(query.id, { text: `⏰ ${startTimeStr}` });
+      
+      // Hỏi bé đã dậy chưa
+      const sleepButtons = buildInlineKeyboard([
+        [
+          { text: '✅ Đã dậy rồi', callback_data: `missed_sleep_ended_${startTimeStr}` },
+          { text: '😴 Vẫn đang ngủ', callback_data: `missed_sleep_ongoing_${startTimeStr}` }
+        ]
+      ]);
+      
+      await safeSendMessage(
+        chatId,
+        `⏰ Bé ngủ từ: ${startTimeStr}\n\n👇 Bé đã dậy chưa?`,
+        sleepButtons
+      );
+      return;
+    }
+    
+    // Bé vẫn đang ngủ
+    if (query.data.startsWith('missed_sleep_ongoing_')) {
+      const startTimeStr = query.data.replace('missed_sleep_ongoing_', '');
+      await bot.answerCallbackQuery(query.id);
+      clearState(chatId);
+      
+      // Lưu vào tracker để theo dõi
+      const now = dayjs.tz(dayjs(), VIETNAM_TZ);
+      const startTime = dayjs.tz(`${now.format('YYYY-MM-DD')} ${startTimeStr}`, VIETNAM_TZ).toDate();
+      sleepSessionTracker.set(chatId, startTime);
+      
+      const elapsed = Math.round((now.toDate().getTime() - startTime.getTime()) / 60000);
+      const elapsedStr = elapsed >= 60 
+        ? `${Math.floor(elapsed/60)}h${elapsed%60}p`
+        : `${elapsed}p`;
+      
+      await safeSendMessage(
+        chatId,
+        `✅ Đã ghi nhận!\n\n😴 Bé đang ngủ từ ${startTimeStr}\n⏱️ Đã ngủ: ${elapsedStr}\n\n💡 Khi bé dậy, bấm nút "😴 Nhật ký ngủ" để kết thúc giấc ngủ.`,
+        mainKeyboard
+      );
+      return;
+    }
+    
+    // Bé đã dậy - chọn giờ dậy
+    if (query.data.startsWith('missed_sleep_ended_')) {
+      const startTimeStr = query.data.replace('missed_sleep_ended_', '');
+      await bot.answerCallbackQuery(query.id);
+      
+      // Hiển thị các button giờ dậy
+      const now = dayjs.tz(dayjs(), VIETNAM_TZ);
+      const timeButtons = [];
+      const row1 = [];
+      const row2 = [];
+      
+      // Tạo các mốc thời gian dậy
+      for (let i = 60; i >= 10; i -= 10) {
+        const time = now.subtract(i, 'minute').format('HH:mm');
+        const btn = { text: time, callback_data: `missed_sleep_woke_${startTimeStr}_${time}` };
+        if (row1.length < 3) row1.push(btn);
+        else row2.push(btn);
+      }
+      row2.push({ text: now.format('HH:mm'), callback_data: `missed_sleep_woke_${startTimeStr}_${now.format('HH:mm')}` });
+      
+      timeButtons.push(row1, row2);
+      timeButtons.push([{ text: '✏️ Nhập giờ khác', callback_data: `missed_sleep_custom_end_${startTimeStr}` }]);
+      
+      await safeSendMessage(
+        chatId,
+        `⏰ Bé ngủ từ: ${startTimeStr}\n\n👇 Bé dậy lúc mấy giờ?`,
+        buildInlineKeyboard(timeButtons)
+      );
+      return;
+    }
+    
+    // Lưu giấc ngủ đã hoàn thành
+    if (query.data.startsWith('missed_sleep_woke_')) {
+      const parts = query.data.replace('missed_sleep_woke_', '').split('_');
+      const startTimeStr = parts[0];
+      const endTimeStr = parts[1];
+      
+      await bot.answerCallbackQuery(query.id, { text: '✅ Đã lưu!' });
+      clearState(chatId);
+      
+      // Lưu vào database
+      const now = dayjs.tz(dayjs(), VIETNAM_TZ);
+      const startTime = dayjs.tz(`${now.format('YYYY-MM-DD')} ${startTimeStr}`, VIETNAM_TZ).toDate();
+      const endTime = dayjs.tz(`${now.format('YYYY-MM-DD')} ${endTimeStr}`, VIETNAM_TZ).toDate();
+      const durationMinutes = Math.round((endTime.getTime() - startTime.getTime()) / 60000);
+      
+      await SleepSession.create({
+        chatId,
+        start: startTime,
+        end: endTime,
+        durationMinutes
+      });
+      
+      const hours = Math.floor(durationMinutes / 60);
+      const mins = durationMinutes % 60;
+      
+      await safeSendMessage(
+        chatId,
+        `✅ Đã ghi nhận!\n\n😴 Ngủ: ${startTimeStr} → ${endTimeStr}\n⏱️ Thời gian: ${hours}h${mins}p`,
+        mainKeyboard
+      );
+      return;
+    }
+    
+    // Nhập giờ ngủ thủ công khi quên
+    if (query.data === 'missed_sleep_custom_start') {
+      await bot.answerCallbackQuery(query.id);
+      setState(chatId, { type: 'missed_sleep_input_start' });
+      await safeSendMessage(
+        chatId,
+        '✏️ Nhập giờ bé bắt đầu ngủ:\n\n📝 Ví dụ:\n• 9 → 09:00\n• 9 30 → 09:30'
+      );
+      return;
+    }
+    
+    // Nhập giờ dậy thủ công
+    if (query.data.startsWith('missed_sleep_custom_end_')) {
+      const startTimeStr = query.data.replace('missed_sleep_custom_end_', '');
+      await bot.answerCallbackQuery(query.id);
+      setState(chatId, { type: 'missed_sleep_input_end', startTimeStr });
+      await safeSendMessage(
+        chatId,
+        `⏰ Bé ngủ từ: ${startTimeStr}\n\n✏️ Nhập giờ bé dậy:\n\n📝 Ví dụ:\n• 11 → 11:00\n• 11 30 → 11:30`
+      );
+      return;
+    }
+    
+    if (query.data === 'missed_sleep_cancel') {
+      await bot.answerCallbackQuery(query.id, { text: 'Đã hủy' });
+      clearState(chatId);
+      await safeSendMessage(chatId, '✅ OK!', mainKeyboard);
       return;
     }
   });

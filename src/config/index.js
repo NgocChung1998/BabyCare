@@ -12,6 +12,7 @@ export const config = {
 
 export const CONSTANTS = {
   MILK_INTERVAL_MINUTES: 150,
+  MILK_INTERVAL_HOURS: 2.5, // 2.5 tiếng = 150 phút
   DIAPER_MIN_MINUTES: 180,
   DIAPER_MAX_MINUTES: 240,
   SCHEDULE_REMINDER_HOUR: 6,
