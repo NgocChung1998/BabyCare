@@ -96,12 +96,8 @@ export const vaccineInlineKeyboard = buildInlineKeyboard([
 // ===== DAILY ROUTINE BUTTONS =====
 export const routineInlineKeyboard = buildInlineKeyboard([
   [
-    { text: '🍼 Lịch ăn hôm nay', callback_data: 'routine_feeds' },
-    { text: '😴 Lịch ngủ hôm nay', callback_data: 'routine_sleeps' }
-  ],
-  [
-    { text: '✏️ Sửa giờ ăn', callback_data: 'routine_edit_feed' },
-    { text: '✏️ Sửa giờ ngủ', callback_data: 'routine_edit_sleep' }
+    { text: '🍼 Xem lịch ăn', callback_data: 'routine_feeds' },
+    { text: '😴 Xem lịch ngủ', callback_data: 'routine_sleeps' }
   ],
   [
     { text: '🔄 Tạo lịch mới', callback_data: 'routine_generate' }

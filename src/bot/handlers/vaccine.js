@@ -100,37 +100,65 @@ const showVaccineMenu = async (chatId) => {
  * Tạo lịch tiêm tự động từ ngày sinh
  */
 const handleAutoGenerate = async (chatId) => {
-  const profile = await ChatProfile.findOne({ chatId });
-  
-  if (!profile?.dateOfBirth) {
+  try {
+    const profile = await ChatProfile.findOne({ chatId });
+    
+    if (!profile?.dateOfBirth) {
+      await safeSendMessage(
+        chatId,
+        '━━━━━━━━━━━━━━━━━━━━\n' +
+        '❌ CHƯA CÓ NGÀY SINH\n' +
+        '━━━━━━━━━━━━━━━━━━━━\n\n' +
+        '📝 Để tạo lịch tiêm tự động, vui lòng cập nhật ngày sinh:\n\n' +
+        '/birthday set YYYY-MM-DD\n\n' +
+        'Ví dụ: /birthday set 2024-05-10',
+        mainKeyboard
+      );
+      return;
+    }
+    
+    console.log(`[Vaccine] Tạo lịch tiêm cho chatId=${chatId}, dateOfBirth=${profile.dateOfBirth}`);
+    
+    const count = await generateVaccinationSchedule(chatId, profile.dateOfBirth);
+    const ageText = formatAge(profile.dateOfBirth);
+    
+    if (count === 0) {
+      await safeSendMessage(
+        chatId,
+        '━━━━━━━━━━━━━━━━━━━━\n' +
+        '⚠️ KHÔNG CÓ MŨI TIÊM MỚI\n' +
+        '━━━━━━━━━━━━━━━━━━━━\n\n' +
+        `👶 Tuổi bé: ${ageText}\n\n` +
+        '💡 Bé có thể đã tiêm hết các mũi cơ bản\n' +
+        'hoặc các mũi còn lại đã quá hạn > 30 ngày.\n\n' +
+        '📝 Bấm "Thêm thủ công" để thêm lịch tiêm mới.',
+        vaccineInlineKeyboard
+      );
+      return;
+    }
+    
     await safeSendMessage(
       chatId,
-      '❌ Chưa có ngày sinh của bé!\n\n' +
-      'Để tạo lịch tiêm tự động, vui lòng cập nhật ngày sinh:\n\n' +
-      '/birthday set YYYY-MM-DD\n\n' +
-      'Ví dụ: /birthday set 2024-05-10',
+      '━━━━━━━━━━━━━━━━━━━━\n' +
+      '✅ TẠO LỊCH TIÊM THÀNH CÔNG\n' +
+      '━━━━━━━━━━━━━━━━━━━━\n\n' +
+      `👶 Tuổi bé: ${ageText}\n` +
+      `💉 Đã tạo: ${count} mũi tiêm\n\n` +
+      '🔔 Em sẽ nhắc bố/mẹ:\n' +
+      '   └─ Trước 7 ngày\n' +
+      '   └─ Trước 3 ngày\n' +
+      '   └─ Đúng ngày tiêm\n\n' +
+      '👇 Bấm để xem chi tiết:',
+      vaccineInlineKeyboard
+    );
+  } catch (error) {
+    console.error('[Vaccine] Lỗi tạo lịch tiêm:', error);
+    await safeSendMessage(
+      chatId,
+      '❌ Có lỗi xảy ra khi tạo lịch tiêm.\n\nVui lòng thử lại sau!',
       mainKeyboard
     );
-    return;
   }
-  
-  const count = await generateVaccinationSchedule(chatId, profile.dateOfBirth);
-  const ageText = formatAge(profile.dateOfBirth);
-  
-  await safeSendMessage(
-    chatId,
-    '━━━━━━━━━━━━━━━━━━━━\n' +
-    '✅ TẠO LỊCH TIÊM THÀNH CÔNG\n' +
-    '━━━━━━━━━━━━━━━━━━━━\n\n' +
-    `👶 Tuổi bé: ${ageText}\n` +
-    `💉 Đã tạo: ${count} mũi tiêm\n\n` +
-    '🔔 Em sẽ nhắc bố/mẹ:\n' +
-    '   └─ Trước 7 ngày\n' +
-    '   └─ Trước 3 ngày\n' +
-    '   └─ Đúng ngày tiêm\n\n' +
-    '👇 Bấm để xem chi tiết:',
-    vaccineInlineKeyboard
-  );
 };
 
 /**
