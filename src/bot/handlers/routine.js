@@ -106,18 +106,29 @@ const showRoutineMenu = async (chatId) => {
 };
 
 /**
- * Hiển thị lịch ăn hôm nay
- * Chỉ hiện: đã hoàn thành (icon ✅) + tương lai (icon ⏳)
- * Không hiện quá khứ chưa hoàn thành
+ * Tính lịch ăn dự kiến dựa trên cữ ăn gần nhất
  */
-const showFeedingSchedule = async (chatId) => {
-  const routine = await generateDailyRoutine(chatId);
+const calculateNextFeedings = (lastFeedTime, intervalHours = 3.5, count = 5) => {
+  const schedule = [];
+  let nextTime = dayjs.tz(lastFeedTime, VIETNAM_TZ);
   
-  if (!routine) {
-    await safeSendMessage(chatId, '❌ Chưa có lịch. Vui lòng cập nhật ngày sinh bé!', mainKeyboard);
-    return;
+  for (let i = 0; i < count; i++) {
+    nextTime = nextTime.add(intervalHours, 'hour');
+    schedule.push({
+      time: nextTime.format('HH:mm'),
+      datetime: nextTime
+    });
   }
   
+  return schedule;
+};
+
+/**
+ * Hiển thị lịch ăn hôm nay
+ * Hiện: đã ăn (✅ với button sửa) + tương lai dựa trên cữ gần nhất (⏳)
+ */
+const showFeedingSchedule = async (chatId) => {
+  const profile = await ChatProfile.findOne({ chatId });
   const now = dayjs.tz(dayjs(), VIETNAM_TZ);
   const currentTime = now.format('HH:mm');
   
@@ -138,30 +149,69 @@ const showFeedingSchedule = async (chatId) => {
     ''
   ];
   
-  // Hiển thị các cữ đã ăn (thực tế)
+  // Tạo buttons cho các cữ đã ăn (để sửa)
+  const feedButtons = [];
+  
+  // Hiển thị các cữ đã ăn (thực tế) với button sửa
   if (actualFeeds.length > 0) {
-    lines.push('✅ ĐÃ ĂN:');
+    lines.push('✅ ĐÃ ĂN (bấm để sửa):');
     lines.push('');
+    
+    const feedRow = [];
     actualFeeds.forEach((feed, i) => {
       const time = dayjs.tz(feed.recordedAt, VIETNAM_TZ).format('HH:mm');
       lines.push(`   ${i + 1}. ✅ ${time} - ${feed.amountMl}ml`);
+      
+      // Tạo button cho mỗi cữ ăn (tối đa 3 button/hàng)
+      feedRow.push({
+        text: `✏️ ${time}`,
+        callback_data: `routine_edit_feed_${feed._id}`
+      });
+      
+      if (feedRow.length === 3) {
+        feedButtons.push([...feedRow]);
+        feedRow.length = 0;
+      }
     });
+    
+    if (feedRow.length > 0) {
+      feedButtons.push([...feedRow]);
+    }
+    
     lines.push('');
     lines.push('━━━━━━━━━━━━━━━━━━━━');
     lines.push('');
   }
   
-  // Lọc lịch dự kiến: chỉ hiện tương lai
-  const futureSchedule = routine.feedingSchedule.filter(feed => {
-    return feed.time >= currentTime;
-  });
-  
-  if (futureSchedule.length > 0) {
-    lines.push('⏳ SẮP TỚI:');
-    lines.push('');
-    futureSchedule.forEach((feed, i) => {
-      lines.push(`   ${i + 1}. ⏳ ${feed.time}`);
-    });
+  // Tính lịch dự kiến dựa trên cữ ăn gần nhất
+  if (actualFeeds.length > 0) {
+    const lastFeed = actualFeeds[actualFeeds.length - 1];
+    const lastFeedTime = dayjs.tz(lastFeed.recordedAt, VIETNAM_TZ);
+    
+    // Lấy interval từ độ tuổi bé
+    let intervalHours = 3.5;
+    if (profile?.dateOfBirth) {
+      const ageMonths = now.diff(dayjs.tz(profile.dateOfBirth, VIETNAM_TZ), 'month');
+      const schedule = getScheduleByAge(ageMonths);
+      intervalHours = schedule.feedingIntervalHours;
+    }
+    
+    const nextFeedings = calculateNextFeedings(lastFeedTime.toDate(), intervalHours, 4);
+    const futureFeedings = nextFeedings.filter(f => f.time > currentTime);
+    
+    if (futureFeedings.length > 0) {
+      lines.push('⏳ DỰ KIẾN (tính từ cữ gần nhất):');
+      lines.push('');
+      futureFeedings.forEach((feed, i) => {
+        lines.push(`   ${i + 1}. ⏳ ${feed.time}`);
+      });
+      lines.push('');
+      lines.push('━━━━━━━━━━━━━━━━━━━━');
+      lines.push('');
+    }
+  } else {
+    // Chưa có cữ ăn nào hôm nay
+    lines.push('📋 Chưa có cữ ăn nào hôm nay');
     lines.push('');
     lines.push('━━━━━━━━━━━━━━━━━━━━');
     lines.push('');
@@ -175,30 +225,23 @@ const showFeedingSchedule = async (chatId) => {
   }
   
   lines.push('');
-  lines.push('💡 Quên ghi nhận? Bấm "Thêm cữ ăn"');
+  lines.push('💡 Bấm nút bên dưới để thêm hoặc sửa');
   
-  const editKeyboard = buildInlineKeyboard([
-    [
-      { text: '➕ Thêm cữ ăn', callback_data: 'routine_add_feed' },
-      { text: '🔙 Quay lại', callback_data: 'routine_back' }
-    ]
+  // Thêm buttons
+  feedButtons.push([
+    { text: '➕ Thêm cữ ăn', callback_data: 'routine_add_feed' },
+    { text: '🔙 Quay lại', callback_data: 'routine_back' }
   ]);
   
-  await safeSendMessage(chatId, lines.join('\n'), editKeyboard);
+  await safeSendMessage(chatId, lines.join('\n'), buildInlineKeyboard(feedButtons));
 };
 
 /**
  * Hiển thị lịch ngủ hôm nay
- * Chỉ hiện: đã ngủ (icon ✅) + tương lai (icon ⏳)
+ * Hiện: đã ngủ (✅ với button sửa) + tương lai (⏳)
  */
 const showSleepSchedule = async (chatId) => {
-  const routine = await generateDailyRoutine(chatId);
-  
-  if (!routine) {
-    await safeSendMessage(chatId, '❌ Chưa có lịch. Vui lòng cập nhật ngày sinh bé!', mainKeyboard);
-    return;
-  }
-  
+  const profile = await ChatProfile.findOne({ chatId });
   const now = dayjs.tz(dayjs(), VIETNAM_TZ);
   const currentTime = now.format('HH:mm');
   
@@ -223,10 +266,15 @@ const showSleepSchedule = async (chatId) => {
     ''
   ];
   
-  // Hiển thị các giấc đã ngủ (thực tế)
+  // Tạo buttons cho các giấc đã ngủ (để sửa)
+  const sleepButtons = [];
+  
+  // Hiển thị các giấc đã ngủ (thực tế) với button sửa
   if (actualSleeps.length > 0) {
-    lines.push('✅ ĐÃ NGỦ:');
+    lines.push('✅ ĐÃ NGỦ (bấm để sửa):');
     lines.push('');
+    
+    const sleepRow = [];
     actualSleeps.forEach((sleep, i) => {
       const start = dayjs.tz(sleep.start, VIETNAM_TZ).format('HH:mm');
       const end = sleep.end ? dayjs.tz(sleep.end, VIETNAM_TZ).format('HH:mm') : 'đang ngủ';
@@ -234,29 +282,51 @@ const showSleepSchedule = async (chatId) => {
         ? ` (${Math.floor(sleep.durationMinutes/60)}h${sleep.durationMinutes%60}p)`
         : '';
       lines.push(`   ${i + 1}. ✅ ${start} → ${end}${duration}`);
+      
+      // Tạo button cho mỗi giấc ngủ (tối đa 3 button/hàng)
+      sleepRow.push({
+        text: `✏️ ${start}`,
+        callback_data: `routine_edit_sleep_${sleep._id}`
+      });
+      
+      if (sleepRow.length === 3) {
+        sleepButtons.push([...sleepRow]);
+        sleepRow.length = 0;
+      }
     });
+    
+    if (sleepRow.length > 0) {
+      sleepButtons.push([...sleepRow]);
+    }
+    
     lines.push('');
     lines.push('━━━━━━━━━━━━━━━━━━━━');
     lines.push('');
   }
   
-  // Lọc lịch dự kiến: chỉ hiện tương lai
-  const futureSchedule = routine.sleepSchedule.filter(sleep => {
-    return sleep.startTime >= currentTime;
-  });
-  
-  if (futureSchedule.length > 0) {
-    lines.push('⏳ SẮP TỚI:');
-    lines.push('');
-    futureSchedule.forEach((sleep, i) => {
-      const durationStr = sleep.duration >= 60 
-        ? `${Math.floor(sleep.duration/60)}h${sleep.duration%60 > 0 ? (sleep.duration%60) + 'p' : ''}`
-        : `${sleep.duration}p`;
-      lines.push(`   ${i + 1}. ⏳ ${sleep.startTime} - ${sleep.name} (~${durationStr})`);
+  // Lấy lịch ngủ dự kiến từ độ tuổi
+  if (profile?.dateOfBirth) {
+    const ageMonths = now.diff(dayjs.tz(profile.dateOfBirth, VIETNAM_TZ), 'month');
+    const schedule = getScheduleByAge(ageMonths);
+    
+    // Lọc lịch dự kiến: chỉ hiện tương lai
+    const futureSchedule = schedule.sleeps.filter(sleep => {
+      return sleep.start >= currentTime;
     });
-    lines.push('');
-    lines.push('━━━━━━━━━━━━━━━━━━━━');
-    lines.push('');
+    
+    if (futureSchedule.length > 0) {
+      lines.push('⏳ DỰ KIẾN THEO TUỔI:');
+      lines.push('');
+      futureSchedule.forEach((sleep, i) => {
+        const durationStr = sleep.duration >= 60 
+          ? `${Math.floor(sleep.duration/60)}h${sleep.duration%60 > 0 ? (sleep.duration%60) + 'p' : ''}`
+          : `${sleep.duration}p`;
+        lines.push(`   ${i + 1}. ⏳ ${sleep.start} - ${sleep.name} (~${durationStr})`);
+      });
+      lines.push('');
+      lines.push('━━━━━━━━━━━━━━━━━━━━');
+      lines.push('');
+    }
   }
   
   // Tổng kết
@@ -269,16 +339,15 @@ const showSleepSchedule = async (chatId) => {
   }
   
   lines.push('');
-  lines.push('💡 Quên ghi nhận? Bấm "Thêm giấc ngủ"');
+  lines.push('💡 Bấm nút bên dưới để thêm hoặc sửa');
   
-  const editKeyboard = buildInlineKeyboard([
-    [
-      { text: '➕ Thêm giấc ngủ', callback_data: 'routine_add_sleep' },
-      { text: '🔙 Quay lại', callback_data: 'routine_back' }
-    ]
+  // Thêm buttons
+  sleepButtons.push([
+    { text: '➕ Thêm giấc ngủ', callback_data: 'routine_add_sleep' },
+    { text: '🔙 Quay lại', callback_data: 'routine_back' }
   ]);
   
-  await safeSendMessage(chatId, lines.join('\n'), editKeyboard);
+  await safeSendMessage(chatId, lines.join('\n'), buildInlineKeyboard(sleepButtons));
 };
 
 /**
@@ -376,18 +445,30 @@ export const registerRoutineHandler = () => {
         return;
       }
       const timeStr = state.timeStr;
+      const feedId = state.feedId;
       clearState(chatId);
       
-      // Lưu vào database
-      const now = dayjs.tz(dayjs(), VIETNAM_TZ);
-      const recordedAt = dayjs.tz(`${now.format('YYYY-MM-DD')} ${timeStr}`, VIETNAM_TZ).toDate();
-      await Feeding.create({ chatId, amountMl: amount, recordedAt });
-      
-      await safeSendMessage(
-        chatId,
-        `✅ Đã ghi nhận!\n\n🍼 ${amount}ml lúc ${timeStr}`,
-        routineInlineKeyboard
-      );
+      if (feedId) {
+        // Đang sửa cữ ăn cũ
+        const now = dayjs.tz(dayjs(), VIETNAM_TZ);
+        const recordedAt = dayjs.tz(`${now.format('YYYY-MM-DD')} ${timeStr}`, VIETNAM_TZ).toDate();
+        await Feeding.findByIdAndUpdate(feedId, { recordedAt, amountMl: amount });
+        await safeSendMessage(
+          chatId,
+          `✅ Đã sửa!\n\n🍼 ${amount}ml lúc ${timeStr}`,
+          routineInlineKeyboard
+        );
+      } else {
+        // Thêm mới
+        const now = dayjs.tz(dayjs(), VIETNAM_TZ);
+        const recordedAt = dayjs.tz(`${now.format('YYYY-MM-DD')} ${timeStr}`, VIETNAM_TZ).toDate();
+        await Feeding.create({ chatId, amountMl: amount, recordedAt });
+        await safeSendMessage(
+          chatId,
+          `✅ Đã ghi nhận!\n\n🍼 ${amount}ml lúc ${timeStr}`,
+          routineInlineKeyboard
+        );
+      }
       // Hiển thị lại lịch ăn
       await showFeedingSchedule(chatId);
       return;
@@ -403,27 +484,46 @@ export const registerRoutineHandler = () => {
         );
         return;
       }
+      const sleepId = state.sleepId;
       clearState(chatId);
       
       // Lưu vào database
       const now = dayjs.tz(dayjs(), VIETNAM_TZ);
       const startTime = dayjs.tz(`${now.format('YYYY-MM-DD')} ${timeStr}`, VIETNAM_TZ).toDate();
-      await SleepSession.create({
-        chatId,
-        start: startTime,
-        end: now.toDate(),
-        durationMinutes: Math.round((now.toDate().getTime() - startTime.getTime()) / 60000)
-      });
       
-      const duration = Math.round((now.toDate().getTime() - startTime.getTime()) / 60000);
-      const hours = Math.floor(duration / 60);
-      const mins = duration % 60;
-      
-      await safeSendMessage(
-        chatId,
-        `✅ Đã ghi nhận!\n\n😴 Ngủ từ ${timeStr} đến ${now.format('HH:mm')}\n⏱️ ${hours}h${mins}p`,
-        routineInlineKeyboard
-      );
+      if (sleepId) {
+        // Đang sửa giấc ngủ cũ
+        const sleep = await SleepSession.findById(sleepId);
+        if (sleep?.end) {
+          const durationMinutes = Math.round((sleep.end.getTime() - startTime.getTime()) / 60000);
+          await SleepSession.findByIdAndUpdate(sleepId, { start: startTime, durationMinutes });
+        } else {
+          await SleepSession.findByIdAndUpdate(sleepId, { start: startTime });
+        }
+        await safeSendMessage(
+          chatId,
+          `✅ Đã sửa!\n\n😴 Ngủ từ ${timeStr}`,
+          routineInlineKeyboard
+        );
+      } else {
+        // Thêm mới - giả sử đã kết thúc (dùng giờ hiện tại làm giờ kết thúc)
+        const durationMinutes = Math.round((now.toDate().getTime() - startTime.getTime()) / 60000);
+        await SleepSession.create({
+          chatId,
+          start: startTime,
+          end: now.toDate(),
+          durationMinutes
+        });
+        
+        const hours = Math.floor(durationMinutes / 60);
+        const mins = durationMinutes % 60;
+        
+        await safeSendMessage(
+          chatId,
+          `✅ Đã ghi nhận!\n\n😴 Ngủ từ ${timeStr} đến ${now.format('HH:mm')}\n⏱️ ${hours}h${mins}p`,
+          routineInlineKeyboard
+        );
+      }
       // Hiển thị lại lịch ngủ
       await showSleepSchedule(chatId);
       return;
@@ -446,7 +546,191 @@ export const registerRoutineHandler = () => {
       return;
     }
     
-    // Thêm cữ ăn - hiển thị button chọn giờ
+    // ===== SỬA CỮ ĂN CỤ THỂ =====
+    if (query.data.startsWith('routine_edit_feed_')) {
+      const feedId = query.data.replace('routine_edit_feed_', '');
+      await bot.answerCallbackQuery(query.id);
+      
+      // Lấy thông tin cữ ăn
+      const feed = await Feeding.findById(feedId);
+      if (!feed) {
+        await safeSendMessage(chatId, '❌ Không tìm thấy cữ ăn này!', mainKeyboard);
+        return;
+      }
+      
+      const feedTime = dayjs.tz(feed.recordedAt, VIETNAM_TZ);
+      const feedTimeStr = feedTime.format('HH:mm');
+      
+      // Tạo các button thời gian xung quanh giờ gốc
+      const timeButtons = [];
+      const baseMinutes = feedTime.hour() * 60 + feedTime.minute();
+      
+      // Tạo 6 mốc: -15, -10, -5, 0, +5, +10 phút
+      const offsets = [-15, -10, -5, 0, 5, 10];
+      const row1 = [];
+      const row2 = [];
+      
+      offsets.forEach((offset, i) => {
+        const newTime = feedTime.add(offset, 'minute').format('HH:mm');
+        const btn = {
+          text: offset === 0 ? `📍${newTime}` : newTime,
+          callback_data: `routine_feed_edit_time_${feedId}_${newTime}`
+        };
+        if (i < 3) row1.push(btn);
+        else row2.push(btn);
+      });
+      
+      timeButtons.push(row1, row2);
+      timeButtons.push([{ text: '✏️ Nhập giờ khác', callback_data: `routine_feed_edit_custom_${feedId}` }]);
+      timeButtons.push([{ text: '🗑️ Xóa cữ này', callback_data: `routine_feed_delete_${feedId}` }]);
+      timeButtons.push([{ text: '❌ Hủy', callback_data: 'routine_cancel_to_feed' }]);
+      
+      await safeSendMessage(
+        chatId,
+        `✏️ SỬA CỮ ĂN\n\n🍼 ${feed.amountMl}ml lúc ${feedTimeStr}\n\n👇 Chọn giờ mới:`,
+        buildInlineKeyboard(timeButtons)
+      );
+      return;
+    }
+    
+    // Chọn giờ mới cho cữ ăn cụ thể
+    if (query.data.startsWith('routine_feed_edit_time_')) {
+      const parts = query.data.replace('routine_feed_edit_time_', '').split('_');
+      const feedId = parts[0];
+      const newTimeStr = parts[1];
+      
+      await bot.answerCallbackQuery(query.id, { text: `⏰ ${newTimeStr}` });
+      
+      // Cập nhật database
+      const now = dayjs.tz(dayjs(), VIETNAM_TZ);
+      const newRecordedAt = dayjs.tz(`${now.format('YYYY-MM-DD')} ${newTimeStr}`, VIETNAM_TZ).toDate();
+      await Feeding.findByIdAndUpdate(feedId, { recordedAt: newRecordedAt });
+      
+      await safeSendMessage(chatId, `✅ Đã sửa giờ ăn thành ${newTimeStr}!`);
+      await showFeedingSchedule(chatId);
+      return;
+    }
+    
+    // Nhập giờ thủ công cho cữ ăn cụ thể
+    if (query.data.startsWith('routine_feed_edit_custom_')) {
+      const feedId = query.data.replace('routine_feed_edit_custom_', '');
+      await bot.answerCallbackQuery(query.id);
+      
+      const feed = await Feeding.findById(feedId);
+      setState(chatId, { type: 'routine_feed_input_time', feedId, oldAmount: feed?.amountMl });
+      
+      await safeSendMessage(
+        chatId,
+        '✏️ Nhập giờ mới:\n\n📝 Ví dụ:\n• 9 → 09:00\n• 9 30 → 09:30'
+      );
+      return;
+    }
+    
+    // Xóa cữ ăn
+    if (query.data.startsWith('routine_feed_delete_')) {
+      const feedId = query.data.replace('routine_feed_delete_', '');
+      await bot.answerCallbackQuery(query.id, { text: 'Đã xóa!' });
+      await Feeding.findByIdAndDelete(feedId);
+      await safeSendMessage(chatId, '✅ Đã xóa cữ ăn!');
+      await showFeedingSchedule(chatId);
+      return;
+    }
+    
+    // ===== SỬA GIẤC NGỦ CỤ THỂ =====
+    if (query.data.startsWith('routine_edit_sleep_')) {
+      const sleepId = query.data.replace('routine_edit_sleep_', '');
+      await bot.answerCallbackQuery(query.id);
+      
+      // Lấy thông tin giấc ngủ
+      const sleep = await SleepSession.findById(sleepId);
+      if (!sleep) {
+        await safeSendMessage(chatId, '❌ Không tìm thấy giấc ngủ này!', mainKeyboard);
+        return;
+      }
+      
+      const sleepTime = dayjs.tz(sleep.start, VIETNAM_TZ);
+      const sleepTimeStr = sleepTime.format('HH:mm');
+      const endTimeStr = sleep.end ? dayjs.tz(sleep.end, VIETNAM_TZ).format('HH:mm') : 'đang ngủ';
+      
+      // Tạo các button thời gian xung quanh giờ gốc
+      const timeButtons = [];
+      const offsets = [-15, -10, -5, 0, 5, 10];
+      const row1 = [];
+      const row2 = [];
+      
+      offsets.forEach((offset, i) => {
+        const newTime = sleepTime.add(offset, 'minute').format('HH:mm');
+        const btn = {
+          text: offset === 0 ? `📍${newTime}` : newTime,
+          callback_data: `routine_sleep_edit_time_${sleepId}_${newTime}`
+        };
+        if (i < 3) row1.push(btn);
+        else row2.push(btn);
+      });
+      
+      timeButtons.push(row1, row2);
+      timeButtons.push([{ text: '✏️ Nhập giờ khác', callback_data: `routine_sleep_edit_custom_${sleepId}` }]);
+      timeButtons.push([{ text: '🗑️ Xóa giấc này', callback_data: `routine_sleep_delete_${sleepId}` }]);
+      timeButtons.push([{ text: '❌ Hủy', callback_data: 'routine_cancel_to_sleep' }]);
+      
+      await safeSendMessage(
+        chatId,
+        `✏️ SỬA GIẤC NGỦ\n\n😴 ${sleepTimeStr} → ${endTimeStr}\n\n👇 Chọn giờ bắt đầu mới:`,
+        buildInlineKeyboard(timeButtons)
+      );
+      return;
+    }
+    
+    // Chọn giờ mới cho giấc ngủ cụ thể
+    if (query.data.startsWith('routine_sleep_edit_time_')) {
+      const parts = query.data.replace('routine_sleep_edit_time_', '').split('_');
+      const sleepId = parts[0];
+      const newTimeStr = parts[1];
+      
+      await bot.answerCallbackQuery(query.id, { text: `⏰ ${newTimeStr}` });
+      
+      // Cập nhật database
+      const sleep = await SleepSession.findById(sleepId);
+      const now = dayjs.tz(dayjs(), VIETNAM_TZ);
+      const newStart = dayjs.tz(`${now.format('YYYY-MM-DD')} ${newTimeStr}`, VIETNAM_TZ).toDate();
+      
+      let update = { start: newStart };
+      if (sleep?.end) {
+        const durationMinutes = Math.round((sleep.end.getTime() - newStart.getTime()) / 60000);
+        update.durationMinutes = durationMinutes;
+      }
+      
+      await SleepSession.findByIdAndUpdate(sleepId, update);
+      
+      await safeSendMessage(chatId, `✅ Đã sửa giờ ngủ thành ${newTimeStr}!`);
+      await showSleepSchedule(chatId);
+      return;
+    }
+    
+    // Nhập giờ thủ công cho giấc ngủ cụ thể
+    if (query.data.startsWith('routine_sleep_edit_custom_')) {
+      const sleepId = query.data.replace('routine_sleep_edit_custom_', '');
+      await bot.answerCallbackQuery(query.id);
+      setState(chatId, { type: 'routine_sleep_input_time', sleepId });
+      
+      await safeSendMessage(
+        chatId,
+        '✏️ Nhập giờ bắt đầu ngủ mới:\n\n📝 Ví dụ:\n• 9 → 09:00\n• 9 30 → 09:30'
+      );
+      return;
+    }
+    
+    // Xóa giấc ngủ
+    if (query.data.startsWith('routine_sleep_delete_')) {
+      const sleepId = query.data.replace('routine_sleep_delete_', '');
+      await bot.answerCallbackQuery(query.id, { text: 'Đã xóa!' });
+      await SleepSession.findByIdAndDelete(sleepId);
+      await safeSendMessage(chatId, '✅ Đã xóa giấc ngủ!');
+      await showSleepSchedule(chatId);
+      return;
+    }
+    
+    // ===== THÊM CỮ ĂN MỚI =====
     if (query.data === 'routine_add_feed') {
       await bot.answerCallbackQuery(query.id);
       setState(chatId, { type: 'routine_feed_select_time' });
@@ -458,7 +742,7 @@ export const registerRoutineHandler = () => {
       return;
     }
     
-    // Thêm giấc ngủ - hiển thị button chọn giờ
+    // ===== THÊM GIẤC NGỦ MỚI =====
     if (query.data === 'routine_add_sleep') {
       await bot.answerCallbackQuery(query.id);
       setState(chatId, { type: 'routine_sleep_select_time' });
@@ -470,7 +754,7 @@ export const registerRoutineHandler = () => {
       return;
     }
     
-    // Chọn giờ ăn
+    // Chọn giờ ăn mới
     if (query.data.startsWith('routine_feed_time_')) {
       const timeStr = query.data.replace('routine_feed_time_', '');
       await bot.answerCallbackQuery(query.id, { text: `⏰ ${timeStr}` });
@@ -515,6 +799,7 @@ export const registerRoutineHandler = () => {
       const amount = parseInt(query.data.replace('routine_feed_amount_', ''), 10);
       const state = getState(chatId);
       const timeStr = state?.timeStr;
+      const feedId = state?.feedId;
       
       await bot.answerCallbackQuery(query.id, { text: `🍼 ${amount}ml` });
       clearState(chatId);
@@ -522,14 +807,15 @@ export const registerRoutineHandler = () => {
       // Lưu vào database
       const now = dayjs.tz(dayjs(), VIETNAM_TZ);
       const recordedAt = dayjs.tz(`${now.format('YYYY-MM-DD')} ${timeStr}`, VIETNAM_TZ).toDate();
-      await Feeding.create({ chatId, amountMl: amount, recordedAt });
       
-      await safeSendMessage(
-        chatId,
-        `✅ Đã ghi nhận!\n\n🍼 ${amount}ml lúc ${timeStr}`,
-        routineInlineKeyboard
-      );
-      // Hiển thị lại lịch ăn
+      if (feedId) {
+        await Feeding.findByIdAndUpdate(feedId, { recordedAt, amountMl: amount });
+        await safeSendMessage(chatId, `✅ Đã sửa!\n\n🍼 ${amount}ml lúc ${timeStr}`);
+      } else {
+        await Feeding.create({ chatId, amountMl: amount, recordedAt });
+        await safeSendMessage(chatId, `✅ Đã ghi nhận!\n\n🍼 ${amount}ml lúc ${timeStr}`);
+      }
+      
       await showFeedingSchedule(chatId);
       return;
     }
@@ -538,12 +824,12 @@ export const registerRoutineHandler = () => {
     if (query.data === 'routine_feed_custom_amount') {
       await bot.answerCallbackQuery(query.id);
       const state = getState(chatId);
-      setState(chatId, { type: 'routine_feed_input_amount', timeStr: state?.timeStr });
+      setState(chatId, { type: 'routine_feed_input_amount', timeStr: state?.timeStr, feedId: state?.feedId });
       await safeSendMessage(chatId, '✏️ Nhập số ml:\n\nVí dụ: 160');
       return;
     }
     
-    // Chọn giờ ngủ
+    // Chọn giờ ngủ mới
     if (query.data.startsWith('routine_sleep_time_')) {
       const timeStr = query.data.replace('routine_sleep_time_', '');
       await bot.answerCallbackQuery(query.id, { text: `⏰ ${timeStr}` });
@@ -566,10 +852,8 @@ export const registerRoutineHandler = () => {
       
       await safeSendMessage(
         chatId,
-        `✅ Đã ghi nhận!\n\n😴 Ngủ từ ${timeStr} đến ${now.format('HH:mm')}\n⏱️ ${hours}h${mins}p`,
-        routineInlineKeyboard
+        `✅ Đã ghi nhận!\n\n😴 Ngủ từ ${timeStr} đến ${now.format('HH:mm')}\n⏱️ ${hours}h${mins}p`
       );
-      // Hiển thị lại lịch ngủ
       await showSleepSchedule(chatId);
       return;
     }
@@ -607,6 +891,20 @@ export const registerRoutineHandler = () => {
       await bot.answerCallbackQuery(query.id, { text: 'Đã hủy' });
       clearState(chatId);
       await showRoutineMenu(chatId);
+      return;
+    }
+    
+    if (query.data === 'routine_cancel_to_feed') {
+      await bot.answerCallbackQuery(query.id, { text: 'Đã hủy' });
+      clearState(chatId);
+      await showFeedingSchedule(chatId);
+      return;
+    }
+    
+    if (query.data === 'routine_cancel_to_sleep') {
+      await bot.answerCallbackQuery(query.id, { text: 'Đã hủy' });
+      clearState(chatId);
+      await showSleepSchedule(chatId);
       return;
     }
   });

@@ -366,7 +366,7 @@ export const registerVaccineHandler = () => {
         await safeSendMessage(chatId, '💉 Ngày không hợp lệ. Nhập lại theo định dạng YYYY-MM-DD hoặc DD/MM/YYYY:');
         return;
       }
-      clearState(chatId);
+      // Lưu ngày và chuyển sang chọn vaccine
       setState(chatId, { type: 'vaccine_name', date: text });
       await showVaccineSelection(chatId);
       return;
@@ -376,6 +376,19 @@ export const registerVaccineHandler = () => {
       const date = state.date;
       clearState(chatId);
       await handleVaccineAdd(chatId, date, text);
+      return;
+    }
+    
+    // Nhập ngày sau khi đã chọn vaccine
+    if (state?.type === 'vaccine_date_for_name') {
+      const date = parseDate(text);
+      if (!date) {
+        await safeSendMessage(chatId, '💉 Ngày không hợp lệ. Nhập lại theo định dạng YYYY-MM-DD hoặc DD/MM/YYYY:');
+        return;
+      }
+      const vaccineName = state.vaccineName;
+      clearState(chatId);
+      await handleVaccineAdd(chatId, text, vaccineName);
       return;
     }
   });
@@ -429,11 +442,21 @@ export const registerVaccineHandler = () => {
       const index = parseInt(query.data.replace('vaccine_select_', ''), 10);
       const vaccineName = commonVaccines[index];
       const state = getState(chatId);
+      console.log(`[Vaccine] vaccine_select callback, state=`, state);
+      
       if (state?.date) {
         await bot.answerCallbackQuery(query.id, { text: `Đã chọn ${vaccineName}` });
         const date = state.date;
         clearState(chatId);
         await handleVaccineAdd(chatId, date, vaccineName);
+      } else {
+        // Không có state date -> hỏi ngày trước
+        await bot.answerCallbackQuery(query.id, { text: `Chọn ${vaccineName}! Nhập ngày tiêm...` });
+        setState(chatId, { type: 'vaccine_date_for_name', vaccineName });
+        await safeSendMessage(
+          chatId,
+          `💉 Vaccine: ${vaccineName}\n\n📅 Nhập ngày tiêm:\n\nVí dụ: 2025-03-10 hoặc 10/03/2025`
+        );
       }
       return;
     }
