@@ -7,7 +7,8 @@ const chatProfileSchema = new mongoose.Schema(
     username: String,
     nightModeEnabled: { type: Boolean, default: false },
     lastInteraction: { type: Date, default: Date.now },
-    dateOfBirth: Date
+    dateOfBirth: Date,
+    currentSleepStart: Date
   },
   { timestamps: true }
 );

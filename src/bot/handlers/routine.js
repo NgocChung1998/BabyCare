@@ -8,7 +8,7 @@ import { generateDailyRoutine, getScheduleByAge } from '../../services/routineSe
 import { setMilkReminder, MILK_REMINDER_SCHEDULE } from '../../services/reminderService.js';
 import { clearState, setState, getState } from '../../utils/stateManager.js';
 import { formatAge } from '../../utils/formatters.js';
-import { sleepSessionTracker } from './sleep.js';
+import { sleepSessionTracker, setOngoingSleep, hydrateSleepTracker } from './sleep.js';
 import { CONSTANTS } from '../../config/index.js';
 import { getGroupChatIds, getPrimaryChatId, notifySyncMembers } from './sync.js';
 import { buildFeedConfirmationMessage } from '../helpers/feedMessages.js';
@@ -139,7 +139,11 @@ const getNextMilkReminder = (feedTime, now) => {
   for (const reminder of MILK_REMINDER_SCHEDULE) {
     const remaining = reminder.minutesAfter - elapsed;
     if (remaining > 0) {
-      return { remaining, message: reminder.message };
+      return { 
+        remaining, 
+        message: reminder.message,
+        label: reminder.label || 'Nhắc nhở'
+      };
     }
   }
   return null;
@@ -152,6 +156,9 @@ const showRoutineMenu = async (chatId) => {
   // Lấy tất cả chatId trong nhóm
   const groupChatIds = await getGroupChatIds(chatId);
   const primaryChatId = groupChatIds[0];
+  
+  // Hydrate sleep tracker từ database (để persist khi restart app)
+  await hydrateSleepTracker(primaryChatId);
   
   const profile = await ChatProfile.findOne({ chatId: { $in: groupChatIds }, dateOfBirth: { $exists: true } });
   
@@ -246,8 +253,10 @@ const showRoutineMenu = async (chatId) => {
     const nextReminder = getNextMilkReminder(feedTime, now);
     lines.push('');
     if (nextReminder) {
-      lines.push(`🔔 Nhắc pha sữa (auto): còn ${formatDurationShort(nextReminder.remaining)}`);
-      lines.push(`   └─ ${nextReminder.message}`);
+      // Tính giờ nhắc = giờ ăn + (minutesSince + remaining)
+      const reminderFireTime = now.add(nextReminder.remaining, 'minute');
+      lines.push(`🔔 Nhắc pha sữa: ${nextReminder.label}`);
+      lines.push(`   └─ Sẽ nhắc lúc: ${reminderFireTime.format('HH:mm')} (còn ${formatDurationShort(nextReminder.remaining)})`);
     } else {
       lines.push('🔔 Nhắc pha sữa: đã qua mọi mốc, kiểm tra lại cữ ăn nhé!');
     }
@@ -540,6 +549,9 @@ const showSleepSchedule = async (chatId) => {
   // Lấy tất cả chatId trong nhóm
   const groupChatIds = await getGroupChatIds(chatId);
   const primaryChatId = groupChatIds[0];
+  
+  // Hydrate sleep tracker từ database
+  await hydrateSleepTracker(primaryChatId);
   
   const profile = await ChatProfile.findOne({ chatId: { $in: groupChatIds }, dateOfBirth: { $exists: true } });
   const now = dayjs.tz(dayjs(), VIETNAM_TZ);
@@ -925,12 +937,12 @@ export const registerRoutineHandler = () => {
       }
       clearState(chatId);
       
-      // Lấy primaryChatId và cập nhật tracker
+      // Lấy primaryChatId và cập nhật tracker + database
       const groupChatIds = await getGroupChatIds(chatId);
       const primaryChatId = groupChatIds[0];
       const now = dayjs.tz(dayjs(), VIETNAM_TZ);
       const newStartTime = dayjs.tz(`${now.format('YYYY-MM-DD')} ${timeStr}`, VIETNAM_TZ).toDate();
-      sleepSessionTracker.set(primaryChatId, newStartTime);
+      await setOngoingSleep(primaryChatId, newStartTime);
       
       // Thông báo đến các thành viên khác
       await notifySyncMembers(chatId, `✏️ Đã sửa giờ bắt đầu ngủ thành ${timeStr}!`);
@@ -1340,8 +1352,13 @@ export const registerRoutineHandler = () => {
     if (query.data === 'routine_edit_current_sleep') {
       await bot.answerCallbackQuery(query.id);
       
+      // Lấy primaryChatId và hydrate tracker
+      const groupChatIdsEdit = await getGroupChatIds(chatId);
+      const primaryChatIdEdit = groupChatIdsEdit[0];
+      await hydrateSleepTracker(primaryChatIdEdit);
+      
       // Lấy giờ bắt đầu từ tracker
-      const startTime = sleepSessionTracker.get(chatId);
+      const startTime = sleepSessionTracker.get(primaryChatIdEdit);
       if (!startTime) {
         await safeSendMessage(chatId, '❌ Bé không đang ngủ!', mainKeyboard);
         return;
@@ -1388,12 +1405,12 @@ export const registerRoutineHandler = () => {
       const newTimeStr = query.data.replace('routine_current_sleep_time_', '');
       await bot.answerCallbackQuery(query.id, { text: `⏰ ${newTimeStr}` });
       
-      // Lấy primaryChatId và cập nhật tracker
+      // Lấy primaryChatId và cập nhật tracker + database
       const groupChatIds2 = await getGroupChatIds(chatId);
       const primaryChatId2 = groupChatIds2[0];
       const now = dayjs.tz(dayjs(), VIETNAM_TZ);
       const newStartTime = dayjs.tz(`${now.format('YYYY-MM-DD')} ${newTimeStr}`, VIETNAM_TZ).toDate();
-      sleepSessionTracker.set(primaryChatId2, newStartTime);
+      await setOngoingSleep(primaryChatId2, newStartTime);
       
       // Thông báo đến các thành viên khác
       await notifySyncMembers(chatId, `✏️ Đã sửa giờ bắt đầu ngủ thành ${newTimeStr}!`);
@@ -1802,12 +1819,12 @@ export const registerRoutineHandler = () => {
       await bot.answerCallbackQuery(query.id);
       clearState(chatId);
       
-      // Lấy primaryChatId và lưu vào tracker
+      // Lấy primaryChatId và lưu vào tracker + database
       const groupChatIds3 = await getGroupChatIds(chatId);
       const primaryChatId3 = groupChatIds3[0];
       const now = dayjs.tz(dayjs(), VIETNAM_TZ);
       const startTime = dayjs.tz(`${now.format('YYYY-MM-DD')} ${startTimeStr}`, VIETNAM_TZ).toDate();
-      sleepSessionTracker.set(primaryChatId3, startTime);
+      await setOngoingSleep(primaryChatId3, startTime);
       
       const elapsed = Math.round((now.toDate().getTime() - startTime.getTime()) / 60000);
       const elapsedStr = elapsed >= 60 

@@ -4,13 +4,14 @@ import { randomDiaperDelayMs } from '../utils/helpers.js';
 const milkTimers = new Map(); // Map<chatId, Array<timeoutId>>
 const diaperTimers = new Map();
 
-// Cấu hình nhắc nhở sữa (phút)
+// Cấu hình nhắc nhở sữa (phút từ lúc ăn)
+// Khoảng cách ăn khuyến nghị: 2.5-3h (150-180 phút)
 export const MILK_REMINDER_SCHEDULE = [
-  { minutesAfter: 120, message: '🍼 Còn 30 phút nữa tới cữ ăn tiếp theo!' },
-  { minutesAfter: 140, message: '🍼 Còn 10 phút nữa tới cữ ăn tiếp theo!' },
-  { minutesAfter: 150, message: '🍼 Đến giờ cho bé ăn rồi bố mẹ ơi!' },
-  { minutesAfter: 165, message: '⚠️ Bé đã quá giờ ăn 15 phút! Nhớ cho bé bú nhé!' },
-  { minutesAfter: 180, message: '⚠️ Bé đã quá giờ ăn 30 phút! Bố/mẹ cho bé ăn ngay nhé!' }
+  { minutesAfter: 120, message: '🍼 Chuẩn bị pha sữa nhé! Còn khoảng 30 phút nữa.', label: 'Nhắc chuẩn bị' },
+  { minutesAfter: 140, message: '🍼 Sắp đến giờ ăn rồi! Pha sữa đi bố mẹ ơi!', label: 'Sắp đến giờ' },
+  { minutesAfter: 150, message: '🍼 Đến giờ cho bé ăn rồi bố mẹ ơi! (2h30 từ cữ trước)', label: 'Đến giờ ăn' },
+  { minutesAfter: 165, message: '⚠️ Bé đã qua 2h45 chưa ăn! Nhớ cho bé bú nhé!', label: 'Nhắc lần 1' },
+  { minutesAfter: 180, message: '⚠️ Bé đã 3 tiếng chưa ăn! Bố/mẹ cho bé ăn ngay nhé!', label: 'Nhắc lần 2' }
 ];
 
 /**

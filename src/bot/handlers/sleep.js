@@ -22,6 +22,39 @@ const getSleepStatus = (chatId) => {
   return { isSleeping: false };
 };
 
+const normalizeToDate = (value) => (value instanceof Date ? value : new Date(value));
+
+export const hydrateSleepTracker = async (chatId) => {
+  if (sleepSessionTracker.has(chatId)) {
+    return sleepSessionTracker.get(chatId);
+  }
+  const profile = await ChatProfile.findOne({ chatId, currentSleepStart: { $exists: true } });
+  if (profile?.currentSleepStart) {
+    const startTime = normalizeToDate(profile.currentSleepStart);
+    sleepSessionTracker.set(chatId, startTime);
+    return startTime;
+  }
+  return null;
+};
+
+export const setOngoingSleep = async (chatId, startTime) => {
+  const normalized = normalizeToDate(startTime);
+  sleepSessionTracker.set(chatId, normalized);
+  await ChatProfile.findOneAndUpdate(
+    { chatId },
+    { currentSleepStart: normalized },
+    { upsert: true, setDefaultsOnInsert: true }
+  );
+};
+
+export const clearOngoingSleep = async (chatId) => {
+  sleepSessionTracker.delete(chatId);
+  await ChatProfile.findOneAndUpdate(
+    { chatId },
+    { $unset: { currentSleepStart: '' } }
+  );
+};
+
 /**
  * Parse thời gian từ input đơn giản
  * "6" -> "06:00"
@@ -131,6 +164,7 @@ const showSleepMenu = async (chatId) => {
   // Lấy tất cả chatId trong nhóm để query dữ liệu chung
   const groupChatIds = await getGroupChatIds(chatId);
   const primaryChatId = groupChatIds[0];
+  await hydrateSleepTracker(primaryChatId);
   
   // Kiểm tra trạng thái ngủ từ primary chatId
   const status = getSleepStatus(primaryChatId);
@@ -332,8 +366,8 @@ const handleSleepStart = async (chatId, timeStr = null) => {
     startTime = new Date();
   }
   
-  // Dùng primaryChatId làm key cho tracker
-  sleepSessionTracker.set(primaryChatId, startTime);
+  // Lưu vào cả memory tracker VÀ database để persist khi restart
+  await setOngoingSleep(primaryChatId, startTime);
   const displayTime = dayjs(startTime).format('HH:mm');
   
   await safeSendMessage(
@@ -387,7 +421,8 @@ const handleSleepStop = async (chatId, endTimeStr = null) => {
   
   // Lưu với primaryChatId để dữ liệu tập trung
   await SleepSession.create({ chatId: primaryChatId, start, end, durationMinutes });
-  sleepSessionTracker.delete(primaryChatId);
+  // Xóa khỏi cả memory tracker VÀ database
+  await clearOngoingSleep(primaryChatId);
 
   const startStr = dayjs(start).format('HH:mm');
   const endStr = dayjs(end).format('HH:mm');
