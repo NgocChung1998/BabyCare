@@ -65,70 +65,84 @@ export const WEAN_SUGGESTIONS = [
   }
 ];
 
-// ===== LỊCH TIÊM CHỦNG VIỆT NAM THEO THÁNG TUỔI =====
-// Dựa trên lịch tiêm chủng mở rộng quốc gia
+// ===== LỊCH TIÊM CHỦNG VIỆT NAM THEO THÁNG TUỔI (VNVC 2024) =====
+// Dựa trên lịch tiêm chủng của Hệ thống tiêm chủng VNVC
 export const VACCINATION_SCHEDULE = [
-  // Sơ sinh (24h đầu)
-  { ageMonths: 0, ageDays: 0, name: 'Viêm gan B (mũi sơ sinh)', required: true },
-  { ageMonths: 0, ageDays: 0, name: 'BCG (Lao)', required: true },
+  // ========== SƠ SINH (24h đầu) ==========
+  { ageMonths: 0, ageDays: 0, name: 'Viêm gan B (mũi sơ sinh)', required: true, note: 'Tiêm trong vòng 24h sau sinh' },
+  { ageMonths: 0, ageDays: 0, name: 'Lao (BCG)', required: true, note: 'Tiêm trong vòng 24h sau sinh' },
   
-  // 2 tháng
-  { ageMonths: 2, name: '5in1/6in1 (mũi 1)', required: true },
-  { ageMonths: 2, name: 'Bại liệt OPV/IPV (mũi 1)', required: true },
-  { ageMonths: 2, name: 'Rotavirus (mũi 1)', required: false },
-  { ageMonths: 2, name: 'Phế cầu khuẩn (mũi 1)', required: false },
+  // ========== 6 TUẦN TUỔI (1.5 tháng) ==========
+  { ageMonths: 1, ageDays: 14, name: '6in1 Infanrix/Hexaxim (mũi 1)', required: true, note: 'Bạch hầu, ho gà, uốn ván, bại liệt, viêm gan B, Hib' },
+  { ageMonths: 1, ageDays: 14, name: 'Rotavirus (liều 1)', required: false, note: 'Phòng tiêu chảy cấp' },
+  { ageMonths: 1, ageDays: 14, name: 'Phế cầu Synflorix/Prevenar (mũi 1)', required: false, note: 'Phòng viêm phổi, viêm tai giữa, viêm màng não' },
+  { ageMonths: 1, ageDays: 14, name: 'Não mô cầu ACYW-135 Nimenrix (mũi 1)', required: false, note: 'Phòng viêm màng não do não mô cầu' },
   
-  // 3 tháng
-  { ageMonths: 3, name: '5in1/6in1 (mũi 2)', required: true },
-  { ageMonths: 3, name: 'Bại liệt OPV/IPV (mũi 2)', required: true },
-  { ageMonths: 3, name: 'Rotavirus (mũi 2)', required: false },
-  { ageMonths: 3, name: 'Phế cầu khuẩn (mũi 2)', required: false },
+  // ========== 2 THÁNG TUỔI ==========
+  { ageMonths: 2, name: 'Não mô cầu B Bexsero (mũi 1)', required: false, note: 'Phòng viêm màng não do não mô cầu nhóm B' },
   
-  // 4 tháng
-  { ageMonths: 4, name: '5in1/6in1 (mũi 3)', required: true },
-  { ageMonths: 4, name: 'Bại liệt OPV/IPV (mũi 3)', required: true },
-  { ageMonths: 4, name: 'Rotavirus (mũi 3)', required: false },
-  { ageMonths: 4, name: 'Phế cầu khuẩn (mũi 3)', required: false },
+  // ========== 3 THÁNG TUỔI ==========
+  { ageMonths: 3, name: '6in1 Infanrix/Hexaxim (mũi 2)', required: true },
+  { ageMonths: 3, name: 'Rotavirus (liều 2)', required: false },
+  { ageMonths: 3, name: 'Phế cầu Synflorix/Prevenar (mũi 2)', required: false },
   
-  // 6 tháng
-  { ageMonths: 6, name: 'Viêm gan B (mũi 3)', required: true },
-  { ageMonths: 6, name: 'Cúm (mũi 1)', required: false },
+  // ========== 4 THÁNG TUỔI ==========
+  { ageMonths: 4, name: '6in1 Infanrix/Hexaxim (mũi 3)', required: true },
+  { ageMonths: 4, name: 'Rotavirus (liều 3)', required: false },
+  { ageMonths: 4, name: 'Phế cầu Synflorix/Prevenar (mũi 3)', required: false },
+  { ageMonths: 4, name: 'Não mô cầu B Bexsero (mũi 2)', required: false },
+  { ageMonths: 4, name: 'Não mô cầu ACYW-135 Nimenrix (mũi 2)', required: false },
   
-  // 7 tháng
-  { ageMonths: 7, name: 'Cúm (mũi 2)', required: false },
+  // ========== 6 THÁNG TUỔI ==========
+  { ageMonths: 6, name: 'Cúm mùa (mũi 1)', required: false, note: 'Trẻ < 9 tuổi tiêm lần đầu cần 2 mũi cách 1 tháng' },
+  { ageMonths: 6, name: 'Não mô cầu B+C VA-MENGOC (mũi 1)', required: false, note: 'Nếu chưa tiêm Bexsero' },
+  { ageMonths: 6, name: 'Não mô cầu ACYW-135 MenQuadfi (mũi 3)', required: false },
   
-  // 9 tháng
-  { ageMonths: 9, name: 'Sởi đơn (mũi 1)', required: true },
-  { ageMonths: 9, name: 'Viêm não Nhật Bản (mũi 1)', required: true },
+  // ========== 7 THÁNG TUỔI ==========
+  { ageMonths: 7, name: 'Cúm mùa (mũi 2)', required: false },
   
-  // 10 tháng
-  { ageMonths: 10, name: 'Viêm não Nhật Bản (mũi 2)', required: true },
+  // ========== 9 THÁNG TUỔI ==========
+  { ageMonths: 9, name: 'Sởi-Quai bị-Rubella Priorix (mũi 1)', required: true, note: 'Hoặc tiêm Sởi đơn' },
+  { ageMonths: 9, name: 'Thủy đậu Varilrix (mũi 1)', required: false },
+  { ageMonths: 9, name: 'Viêm não Nhật Bản Imojev (mũi 1)', required: true, note: 'Vắc xin sống giảm độc lực' },
+  { ageMonths: 9, name: 'Não mô cầu ACYW-135 Menactra (mũi 1)', required: false, note: 'Nếu chưa tiêm Nimenrix/MenQuadfi' },
   
-  // 12 tháng
-  { ageMonths: 12, name: 'Sởi-Quai bị-Rubella MMR (mũi 1)', required: true },
-  { ageMonths: 12, name: 'Thủy đậu (mũi 1)', required: false },
-  { ageMonths: 12, name: 'Viêm gan A (mũi 1)', required: false },
-  { ageMonths: 12, name: 'Phế cầu khuẩn (mũi 4 - nhắc lại)', required: false },
+  // ========== 12 THÁNG TUỔI (1 tuổi) ==========
+  { ageMonths: 12, name: 'Sởi-Quai bị-Rubella Priorix/MMR-II (mũi 2)', required: true, note: 'Mũi 2 nếu đã tiêm Priorix lúc 9 tháng' },
+  { ageMonths: 12, name: 'Thủy đậu (mũi 2)', required: false },
+  { ageMonths: 12, name: 'Viêm não Nhật Bản Jevax (mũi 1+2)', required: true, note: '2 mũi cách nhau 1-2 tuần. Nếu chưa tiêm Imojev' },
+  { ageMonths: 12, name: 'Viêm gan A Avaxim (mũi 1)', required: false },
+  { ageMonths: 12, name: 'Phế cầu (mũi 4 - nhắc lại)', required: false },
+  { ageMonths: 12, name: 'Viêm gan A+B Twinrix (mũi 1)', required: false },
+  { ageMonths: 12, name: 'Não mô cầu B Bexsero (mũi 3)', required: false },
+  { ageMonths: 12, name: 'Não mô cầu ACYW-135 Menactra (mũi 2)', required: false, note: 'Nếu tiêm mũi 1 lúc 9 tháng' },
+  { ageMonths: 12, name: 'Não mô cầu ACYW-135 Nimenrix (mũi 3)', required: false },
   
-  // 15 tháng
-  { ageMonths: 15, name: '5in1/6in1 (mũi 4 - nhắc lại)', required: true },
+  // ========== 15-18 THÁNG TUỔI ==========
+  { ageMonths: 15, name: '6in1/5in1 (mũi 4 - nhắc lại)', required: true },
+  { ageMonths: 18, name: 'Viêm gan A Avaxim (mũi 2)', required: false },
+  { ageMonths: 18, name: 'Viêm gan A+B Twinrix (mũi 2)', required: false },
+  { ageMonths: 18, name: 'Sởi-Quai bị-Rubella MMR-II (mũi 2)', required: true, note: 'Nếu chưa tiêm đủ 2 mũi' },
   
-  // 18 tháng
-  { ageMonths: 18, name: 'Viêm gan A (mũi 2)', required: false },
-  { ageMonths: 18, name: 'Sởi-Quai bị-Rubella MMR (mũi 2)', required: true },
-  { ageMonths: 18, name: 'Thủy đậu (mũi 2)', required: false },
+  // ========== 24 THÁNG TUỔI (2 tuổi) ==========
+  { ageMonths: 24, name: 'Viêm não Nhật Bản Jevax (mũi 3)', required: true, note: 'Nếu tiêm Jevax' },
+  { ageMonths: 24, name: 'Viêm não Nhật Bản Imojev (mũi 2)', required: true, note: 'Nếu tiêm Imojev' },
+  { ageMonths: 24, name: 'Thương hàn Typhim VI (1 mũi)', required: false, note: 'Tiêm nhắc mỗi 3 năm' },
+  { ageMonths: 24, name: 'Tả Morcvax (2 liều)', required: false, note: '2 liều cách nhau tối thiểu 2 tuần' },
+  { ageMonths: 24, name: 'Phế cầu Pneumovax 23 (1 mũi)', required: false, note: 'Cho trẻ từ 2 tuổi' },
   
-  // 24 tháng (2 tuổi)
-  { ageMonths: 24, name: 'Viêm não Nhật Bản (mũi 3 - nhắc lại)', required: true },
-  { ageMonths: 24, name: 'Viêm màng não mô cầu A+C', required: false },
+  // ========== 4 TUỔI TRỞ LÊN ==========
+  { ageMonths: 48, name: 'Sốt xuất huyết Qdenga (mũi 1)', required: false, note: '2 mũi cách nhau 3 tháng' },
+  { ageMonths: 48, name: 'Sởi-Quai bị-Rubella Priorix (mũi 3)', required: false, note: 'Mũi khuyến cáo' },
+  { ageMonths: 51, name: 'Sốt xuất huyết Qdenga (mũi 2)', required: false },
   
-  // 4-6 tuổi
-  { ageMonths: 48, name: 'DPT (Bạch hầu-Ho gà-Uốn ván) nhắc lại', required: true },
-  { ageMonths: 48, name: 'Bại liệt IPV nhắc lại', required: true },
-  { ageMonths: 48, name: 'Sởi-Quai bị-Rubella nhắc lại', required: false },
+  // ========== 5 TUỔI ==========
+  { ageMonths: 60, name: 'Viêm não Nhật Bản Jevax (mũi nhắc)', required: true },
+  { ageMonths: 60, name: 'DPT (Bạch hầu-Ho gà-Uốn ván) nhắc lại', required: true },
+  { ageMonths: 60, name: 'Bại liệt IPV nhắc lại', required: true },
   
-  // Hàng năm
-  { ageMonths: 6, name: 'Cúm mùa (tiêm nhắc hàng năm)', required: false, recurring: true }
+  // ========== HÀNG NĂM ==========
+  { ageMonths: 6, name: 'Cúm mùa (tiêm nhắc hàng năm)', required: false, recurring: true, note: 'Tiêm nhắc 1 mũi mỗi năm' }
 ];
 
 // ===== LỊCH ĂN NGỦ THEO ĐỘ TUỔI =====

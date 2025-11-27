@@ -204,33 +204,8 @@ const showRoutineMenu = async (chatId) => {
   
   lines.push('');
   lines.push('━━━━━━━━━━━━━━━━━━━━');
-  lines.push('📊 LỊCH DỰ KIẾN THEO TUỔI');
-  lines.push('━━━━━━━━━━━━━━━━━━━━');
   lines.push('');
-  
-  // Hiển thị lịch dự kiến theo tuổi
-  lines.push('🍼 CỮ ĂN:');
-  schedule.feeds.forEach((feedTime, i) => {
-    const isPast = feedTime < now.format('HH:mm');
-    const icon = isPast ? '✅' : '⏳';
-    lines.push(`   ${icon} ${feedTime}`);
-  });
-  
-  lines.push('');
-  lines.push('😴 GIẤC NGỦ:');
-  schedule.sleeps.forEach((sleep, i) => {
-    const isPast = sleep.start < now.format('HH:mm');
-    const icon = isPast ? '✅' : '⏳';
-    const durationStr = sleep.duration >= 60 
-      ? `${Math.floor(sleep.duration/60)}h${sleep.duration%60 > 0 ? (sleep.duration%60) + 'p' : ''}`
-      : `${sleep.duration}p`;
-    lines.push(`   ${icon} ${sleep.start} - ${sleep.name} (~${durationStr})`);
-  });
-  
-  lines.push('');
-  lines.push('━━━━━━━━━━━━━━━━━━━━');
-  lines.push('');
-  lines.push('👇 Chọn để xem chi tiết:');
+  lines.push('💡 Bấm để xem chi tiết lịch ăn/ngủ:');
   
   await safeSendMessage(chatId, lines.join('\n'), routineInlineKeyboard);
 };
@@ -347,6 +322,23 @@ const showFeedingSchedule = async (chatId) => {
     lines.push('');
   }
   
+  // Lịch khuyến nghị theo độ tuổi
+  if (profile?.dateOfBirth) {
+    const ageMonths = now.diff(dayjs.tz(profile.dateOfBirth, VIETNAM_TZ), 'month');
+    const schedule = getScheduleByAge(ageMonths);
+    
+    lines.push('📋 LỊCH KHUYẾN NGHỊ THEO TUỔI:');
+    lines.push(`   └─ Khoảng cách: mỗi ${schedule.feedingIntervalHours}h`);
+    lines.push('');
+    lines.push('   🕐 Khung giờ gợi ý:');
+    schedule.feeds.forEach((feedTime, i) => {
+      lines.push(`      ${i + 1}. ${feedTime}`);
+    });
+    lines.push('');
+    lines.push('━━━━━━━━━━━━━━━━━━━━');
+    lines.push('');
+  }
+  
   // Tổng kết
   lines.push(`📊 Hôm nay: ${actualFeeds.length} cữ`);
   if (actualFeeds.length > 0) {
@@ -434,29 +426,28 @@ const showSleepSchedule = async (chatId) => {
     lines.push('');
   }
   
-  // Lấy lịch ngủ dự kiến từ độ tuổi
+  // Lịch khuyến nghị theo độ tuổi
   if (profile?.dateOfBirth) {
     const ageMonths = now.diff(dayjs.tz(profile.dateOfBirth, VIETNAM_TZ), 'month');
     const schedule = getScheduleByAge(ageMonths);
     
-    // Lọc lịch dự kiến: chỉ hiện tương lai
-    const futureSchedule = schedule.sleeps.filter(sleep => {
-      return sleep.start >= currentTime;
+    lines.push('📋 LỊCH NGỦ KHUYẾN NGHỊ THEO TUỔI:');
+    lines.push(`   └─ Tổng ngủ/ngày: ${schedule.totalSleep}`);
+    lines.push(`   └─ Ngủ đêm: ${schedule.nightSleep}`);
+    lines.push(`   └─ Giấc ngày: ${schedule.naps}`);
+    lines.push('');
+    lines.push('   🌙 Khung giờ gợi ý:');
+    schedule.sleeps.forEach((sleep, i) => {
+      const isPast = sleep.start < currentTime;
+      const icon = isPast ? '✓' : '⏳';
+      const durationStr = sleep.duration >= 60 
+        ? `${Math.floor(sleep.duration/60)}h${sleep.duration%60 > 0 ? (sleep.duration%60) + 'p' : ''}`
+        : `${sleep.duration}p`;
+      lines.push(`      ${icon} ${sleep.start} - ${sleep.name} (~${durationStr})`);
     });
-    
-    if (futureSchedule.length > 0) {
-      lines.push('⏳ DỰ KIẾN THEO TUỔI:');
-      lines.push('');
-      futureSchedule.forEach((sleep, i) => {
-        const durationStr = sleep.duration >= 60 
-          ? `${Math.floor(sleep.duration/60)}h${sleep.duration%60 > 0 ? (sleep.duration%60) + 'p' : ''}`
-          : `${sleep.duration}p`;
-        lines.push(`   ${i + 1}. ⏳ ${sleep.start} - ${sleep.name} (~${durationStr})`);
-      });
-      lines.push('');
-      lines.push('━━━━━━━━━━━━━━━━━━━━');
-      lines.push('');
-    }
+    lines.push('');
+    lines.push('━━━━━━━━━━━━━━━━━━━━');
+    lines.push('');
   }
   
   // Tổng kết
