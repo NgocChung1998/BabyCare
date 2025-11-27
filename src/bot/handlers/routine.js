@@ -5,7 +5,7 @@ import { bot, safeSendMessage } from '../index.js';
 import { ChatProfile, Feeding, SleepSession, DailyRoutine } from '../../database/models/index.js';
 import { routineInlineKeyboard, buildInlineKeyboard, mainKeyboard } from '../keyboard.js';
 import { generateDailyRoutine, getScheduleByAge } from '../../services/routineService.js';
-import { setMilkReminder } from '../../services/reminderService.js';
+import { setMilkReminder, MILK_REMINDER_SCHEDULE } from '../../services/reminderService.js';
 import { clearState, setState, getState } from '../../utils/stateManager.js';
 import { formatAge } from '../../utils/formatters.js';
 import { sleepSessionTracker } from './sleep.js';
@@ -17,6 +17,16 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 const VIETNAM_TZ = 'Asia/Ho_Chi_Minh';
+
+const formatDurationShort = (minutes) => {
+  if (minutes <= 0) return '0p';
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours > 0) {
+    return `${hours}h${mins > 0 ? `${mins}p` : ''}`;
+  }
+  return `${mins}p`;
+};
 
 /**
  * Lấy thời gian thức khuyến nghị theo độ tuổi (phút)
@@ -124,6 +134,17 @@ const sendFeedConfirmation = async ({
   await safeSendMessage(chatId, message, keyboard);
 };
 
+const getNextMilkReminder = (feedTime, now) => {
+  const elapsed = now.diff(feedTime, 'minute');
+  for (const reminder of MILK_REMINDER_SCHEDULE) {
+    const remaining = reminder.minutesAfter - elapsed;
+    if (remaining > 0) {
+      return { remaining, message: reminder.message };
+    }
+  }
+  return null;
+};
+
 /**
  * Hiển thị menu lịch ăn ngủ với thông tin tổng quát
  */
@@ -221,6 +242,15 @@ const showRoutineMenu = async (chatId) => {
     lines.push('');
     lines.push(`⏳ Cữ tiếp theo: ${nextFeedTime.format('HH:mm')}`);
     lines.push(`   └─ ${untilStr}`);
+
+    const nextReminder = getNextMilkReminder(feedTime, now);
+    lines.push('');
+    if (nextReminder) {
+      lines.push(`🔔 Nhắc pha sữa (auto): còn ${formatDurationShort(nextReminder.remaining)}`);
+      lines.push(`   └─ ${nextReminder.message}`);
+    } else {
+      lines.push('🔔 Nhắc pha sữa: đã qua mọi mốc, kiểm tra lại cữ ăn nhé!');
+    }
   } else {
     lines.push('📋 Chưa có cữ ăn hôm nay');
     lines.push('');

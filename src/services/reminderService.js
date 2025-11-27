@@ -5,7 +5,7 @@ const milkTimers = new Map(); // Map<chatId, Array<timeoutId>>
 const diaperTimers = new Map();
 
 // Cấu hình nhắc nhở sữa (phút)
-const MILK_REMINDER_SCHEDULE = [
+export const MILK_REMINDER_SCHEDULE = [
   { minutesAfter: 120, message: '🍼 Còn 30 phút nữa tới cữ ăn tiếp theo!' },
   { minutesAfter: 140, message: '🍼 Còn 10 phút nữa tới cữ ăn tiếp theo!' },
   { minutesAfter: 150, message: '🍼 Đến giờ cho bé ăn rồi bố mẹ ơi!' },
