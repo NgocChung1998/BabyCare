@@ -2,10 +2,10 @@ import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc.js';
 import timezone from 'dayjs/plugin/timezone.js';
 import { bot, safeSendMessage } from '../index.js';
-import { ChatProfile, Feeding, SleepSession, DailyRoutine } from '../../database/models/index.js';
+import { ChatProfile, Feeding, SleepSession, DailyRoutine, DiaperLog } from '../../database/models/index.js';
 import { routineInlineKeyboard, buildInlineKeyboard, mainKeyboard } from '../keyboard.js';
 import { generateDailyRoutine, getScheduleByAge } from '../../services/routineService.js';
-import { setMilkReminder, MILK_REMINDER_SCHEDULE } from '../../services/reminderService.js';
+import { setMilkReminder, MILK_REMINDER_SCHEDULE, DIAPER_REMINDER_SCHEDULE } from '../../services/reminderService.js';
 import { clearState, setState, getState } from '../../utils/stateManager.js';
 import { formatAge } from '../../utils/formatters.js';
 import { sleepSessionTracker, setOngoingSleep, hydrateSleepTracker } from './sleep.js';
@@ -149,6 +149,21 @@ const getNextMilkReminder = (feedTime, now) => {
   return null;
 };
 
+const getNextDiaperReminder = (diaperTime, now) => {
+  const elapsed = now.diff(diaperTime, 'minute');
+  for (const reminder of DIAPER_REMINDER_SCHEDULE) {
+    const remaining = reminder.minutesAfter - elapsed;
+    if (remaining > 0) {
+      return { 
+        remaining, 
+        message: reminder.message,
+        label: reminder.label || 'Nhắc nhở'
+      };
+    }
+  }
+  return null;
+};
+
 /**
  * Hiển thị menu lịch ăn ngủ với thông tin tổng quát
  */
@@ -266,6 +281,52 @@ const showRoutineMenu = async (chatId) => {
     lines.push(`💡 Khuyến nghị: mỗi ${schedule.feedingIntervalHours}h`);
   }
   
+  // --- THÔNG TIN TÃ ---
+  lines.push('');
+  lines.push('━━━━━━━━━━━━━━━━━━━━');
+  lines.push('🧷 THÔNG TIN TÃ');
+  lines.push('━━━━━━━━━━━━━━━━━━━━');
+  lines.push('');
+  
+  // Lấy thông tin thay tã gần nhất
+  const lastDiaper = await DiaperLog.findOne({ chatId: { $in: groupChatIds } })
+    .sort({ recordedAt: -1 });
+  
+  if (lastDiaper) {
+    const diaperTime = dayjs.tz(lastDiaper.recordedAt, VIETNAM_TZ);
+    const diaperTimeStr = diaperTime.format('HH:mm');
+    const minutesSinceDiaper = Math.round((now.toDate().getTime() - diaperTime.toDate().getTime()) / 60000);
+    const hoursSinceDiaper = Math.floor(minutesSinceDiaper / 60);
+    const minsSinceDiaper = minutesSinceDiaper % 60;
+    
+    let sinceDiaperStr;
+    if (hoursSinceDiaper > 0) {
+      sinceDiaperStr = `${hoursSinceDiaper}h${minsSinceDiaper > 0 ? `${minsSinceDiaper}p` : ''} trước`;
+    } else {
+      sinceDiaperStr = `${minsSinceDiaper}p trước`;
+    }
+    
+    const typeIcon = lastDiaper.type === 'wet' ? '💧' : lastDiaper.type === 'dirty' ? '💩' : '💧💩';
+    const typeText = lastDiaper.type === 'wet' ? 'Ướt' : lastDiaper.type === 'dirty' ? 'Bẩn' : 'Ướt & Bẩn';
+    
+    lines.push(`✅ Thay tã gần nhất: ${diaperTimeStr} (${typeText})`);
+    lines.push(`   └─ ${sinceDiaperStr}`);
+    
+    const nextDiaperReminder = getNextDiaperReminder(diaperTime, now);
+    lines.push('');
+    if (nextDiaperReminder) {
+      const diaperReminderFireTime = now.add(nextDiaperReminder.remaining, 'minute');
+      lines.push(`🔔 Nhắc thay tã: ${nextDiaperReminder.label}`);
+      lines.push(`   └─ Sẽ nhắc lúc: ${diaperReminderFireTime.format('HH:mm')} (còn ${formatDurationShort(nextDiaperReminder.remaining)})`);
+    } else {
+      lines.push('🔔 Nhắc thay tã: đã qua mọi mốc, kiểm tra tã ngay nhé!');
+    }
+  } else {
+    lines.push('📋 Chưa có thông tin thay tã');
+    lines.push('💡 Nên thay tã mỗi 2.5-4 tiếng');
+  }
+  
+  // --- THÔNG TIN NGỦ ---
   lines.push('');
   lines.push('━━━━━━━━━━━━━━━━━━━━');
   lines.push('😴 THÔNG TIN NGỦ');

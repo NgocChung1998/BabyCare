@@ -510,6 +510,52 @@ export const registerWeanHandler = () => {
     clearState(msg.chat.id);
     await showWeanMenu(msg.chat.id);
   });
+  
+  // /wean reset - xóa toàn bộ dữ liệu ăn dặm
+  bot.onText(/\/wean\s+reset/, async (msg) => {
+    clearState(msg.chat.id);
+    const chatId = msg.chat.id;
+    
+    const confirmKeyboard = buildInlineKeyboard([
+      [
+        { text: '✅ Xác nhận xóa', callback_data: 'wean_reset_confirm' },
+        { text: '❌ Hủy', callback_data: 'wean_menu' }
+      ]
+    ]);
+    
+    await safeSendMessage(
+      chatId,
+      '⚠️ BẠN CÓ CHẮC MUỐN XÓA?\n\nToàn bộ dữ liệu ăn dặm sẽ bị xóa và không thể khôi phục.',
+      confirmKeyboard
+    );
+  });
+  
+  // Callback reset confirm
+  bot.on('callback_query', async (query) => {
+    const chatId = query.message.chat.id;
+    
+    if (query.data === 'wean_reset_confirm') {
+      await bot.answerCallbackQuery(query.id, { text: 'Đang xóa...' });
+      try {
+        const result = await FoodLog.deleteMany({ chatId });
+        await safeSendMessage(
+          chatId,
+          `✅ Đã xóa ${result.deletedCount} món ăn dặm.`,
+          weanInlineKeyboard
+        );
+      } catch (error) {
+        console.error('Lỗi xóa FoodLog:', error);
+        await safeSendMessage(chatId, '❌ Lỗi khi xóa dữ liệu. Vui lòng thử lại.', weanInlineKeyboard);
+      }
+      return;
+    }
+    
+    if (query.data === 'wean_menu') {
+      await bot.answerCallbackQuery(query.id);
+      await showWeanMenu(chatId);
+      return;
+    }
+  });
 };
 
 export default registerWeanHandler;

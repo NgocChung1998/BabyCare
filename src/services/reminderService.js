@@ -8,21 +8,21 @@ const awakeTimers = new Map(); // Map<chatId, Array<timeoutId>> - nhắc bé th�
 const sleepTimers = new Map(); // Map<chatId, Array<timeoutId>> - nhắc bé ngủ quá lâu
 
 // Cấu hình nhắc nhở sữa (phút từ lúc ăn)
-// Khoảng cách ăn khuyến nghị: 2.5-3h (150-180 phút)
+// Thời gian linh hoạt theo tuổi bé, các mốc dưới là tối thiểu
 export const MILK_REMINDER_SCHEDULE = [
-  { minutesAfter: 120, message: '🍼 Chuẩn bị pha sữa nhé! Còn khoảng 30 phút nữa.', label: 'Nhắc chuẩn bị' },
-  { minutesAfter: 140, message: '🍼 Sắp đến giờ ăn rồi! Pha sữa đi bố mẹ ơi!', label: 'Sắp đến giờ' },
-  { minutesAfter: 150, message: '🍼 Đến giờ cho bé ăn rồi bố mẹ ơi! (2h30 từ cữ trước)', label: 'Đến giờ ăn' },
-  { minutesAfter: 165, message: '⚠️ Bé đã qua 2h45 chưa ăn! Nhớ cho bé bú nhé!', label: 'Nhắc lần 1' },
-  { minutesAfter: 180, message: '⚠️ Bé đã 3 tiếng chưa ăn! Bố/mẹ cho bé ăn ngay nhé!', label: 'Nhắc lần 2' }
+  { minutesAfter: 120, message: '🍼 Đã 2 tiếng từ cữ trước! Chuẩn bị pha sữa nhé!', label: 'Đã 2h' },
+  { minutesAfter: 140, message: '🍼 Đã 2h20 rồi! Pha sữa cho bé nhé!', label: 'Đã 2h20' },
+  { minutesAfter: 150, message: '🍼 Đã 2h30 rồi! Cho bé ăn thôi bố mẹ ơi!', label: 'Đã 2h30' },
+  { minutesAfter: 165, message: '⚠️ Đã 2h45 rồi! Bé có thể đói, cho ăn ngay nhé!', label: 'Đã 2h45' },
+  { minutesAfter: 180, message: '⚠️ Đã 3 tiếng rồi! Cho bé ăn ngay nhé!', label: 'Đã 3h' }
 ];
 
 // Cấu hình nhắc thay tã (phút từ lúc thay)
 export const DIAPER_REMINDER_SCHEDULE = [
-  { minutesAfter: 150, message: '🧷 Đã 2.5 tiếng rồi, kiểm tra tã cho bé nhé!', label: 'Nhắc lần 1' },
-  { minutesAfter: 180, message: '🧷 Đã 3 tiếng rồi, bố/mẹ kiểm tra tã cho bé nhé!', label: 'Nhắc lần 2' },
-  { minutesAfter: 210, message: '🧷 Đã 3.5 tiếng rồi! Nên thay tã cho bé ngay!', label: 'Nhắc lần 3' },
-  { minutesAfter: 240, message: '⚠️ Đã 4 tiếng! Tã có thể đầy rồi, thay ngay cho bé nhé!', label: 'Nhắc khẩn' }
+  { minutesAfter: 150, message: '🧷 Đã 2.5 tiếng rồi, kiểm tra tã cho bé nhé!', label: 'Đã 2h30' },
+  { minutesAfter: 180, message: '🧷 Đã 3 tiếng rồi, bố/mẹ kiểm tra tã cho bé nhé!', label: 'Đã 3h' },
+  { minutesAfter: 210, message: '🧷 Đã 3.5 tiếng rồi! Nên thay tã cho bé ngay!', label: 'Đã 3h30' },
+  { minutesAfter: 240, message: '⚠️ Đã 4 tiếng! Tã có thể đầy rồi, thay ngay cho bé nhé!', label: 'Đã 4h!' }
 ];
 
 /**
